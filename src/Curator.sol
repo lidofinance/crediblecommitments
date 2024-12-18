@@ -48,7 +48,7 @@ contract Curator {
         uint256 keysRangeEnd;
     }
 
-    address immutable public stakingRouterAddress;
+    address public immutable stakingRouterAddress;
     address public owner;
 
     mapping(address => RegisteredOperator) public operators;
@@ -81,10 +81,7 @@ contract Curator {
 
         // Проверяем, не превышает ли количество ключей лимит для модуля
         uint256 totalKeys = keysRangeEnd - keysRangeStart + 1;
-        require(
-            totalKeys <= maxValidatorsForModule[moduleId],
-            "Validator limit exceeded for module"
-        );
+        require(totalKeys <= maxValidatorsForModule[moduleId], "Validator limit exceeded for module");
 
         operators[rewardAddress] = RegisteredOperator({
             eoa: eoa,

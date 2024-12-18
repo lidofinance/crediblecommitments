@@ -66,7 +66,8 @@ contract CuratorTest is Test {
         curator.optIn(address(0xabc), address(0xdef), 1, 1, 1, 10);
 
         // Проверяем, что оператор зарегистрирован
-        (address eoa, uint256 moduleId, uint256 operatorId, uint256 keysRangeStart, uint256 keysRangeEnd) = curator.operators(address(0xabc));
+        (address eoa, uint256 moduleId, uint256 operatorId, uint256 keysRangeStart, uint256 keysRangeEnd) =
+            curator.operators(address(0xabc));
 
         assertEq(eoa, address(0xdef), "EOA not set correctly");
         assertEq(moduleId, 1, "Module ID not set correctly");
