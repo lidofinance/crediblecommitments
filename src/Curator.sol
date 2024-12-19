@@ -46,10 +46,18 @@ contract Curator {
         uint256 keysRangeEnd;
     }
 
+    uint256 public constant DEFAULT_MAX_VALIDATORS = 1000; // Default max validators if not set explicitly
+
     address public immutable stakingRouterAddress;
     address public immutable managerAddress;
 
     mapping(address => RegisteredOperator) public operators;
+    mapping(uint256 => uint256) public maxValidatorsForModule;
+
+    modifier onlyOwner() {
+        require(msg.sender == managerAddress, "Not the owner");
+        _;
+    }
 
     constructor(address _stakingRouterAddress, address _managerAddress) {
         stakingRouterAddress = _stakingRouterAddress;
@@ -71,6 +79,8 @@ contract Curator {
 
         address operatorRewardAddress =
             _checkOperatorAndGetRewardAddress(module, moduleId, operatorId, keysRangeStart, keysRangeEnd);
+
+        _checkMaxValidators(moduleId, keysRangeStart, keysRangeEnd);
 
         // @todo Uncomment when we create test node operator in 3rd module
         /*if (msg.sender != operatorRewardAddress) {
@@ -130,6 +140,8 @@ contract Curator {
 
         _checkOperatorId(module, msg.sender, moduleId, operatorId);
 
+        _checkMaxValidators(moduleId, newKeysRangeStart, newKeysRangeEnd);
+
         address operatorRewardAddress =
             _checkOperatorAndGetRewardAddress(module, moduleId, operatorId, newKeysRangeStart, newKeysRangeEnd);
 
@@ -144,6 +156,21 @@ contract Curator {
 
         operators[operatorRewardAddress].keysRangeStart = newKeysRangeStart;
         operators[operatorRewardAddress].keysRangeEnd = newKeysRangeEnd;
+    }
+
+    function setMaxValidatorsForStakingModule(uint256 moduleId, uint256 maxValidators) external onlyOwner {
+        require(moduleId > 0, "Invalid module ID");
+        require(maxValidators > 0, "Max validators must be greater than 0");
+
+        maxValidatorsForModule[moduleId] = maxValidators;
+    }
+
+    function _checkMaxValidators(uint256 moduleId, uint256 keysRangeStart, uint256 keysRangeEnd) internal {
+        uint256 totalKeys = keysRangeEnd - keysRangeStart + 1;
+        uint256 maxValidators =
+            maxValidatorsForModule[moduleId] == 0 ? DEFAULT_MAX_VALIDATORS : maxValidatorsForModule[moduleId];
+
+        require(totalKeys <= maxValidators, "Validator limit exceeded for module");
     }
 
     function _checkModuleId(IStakingRouter router, address sender, uint256 moduleId) internal {
