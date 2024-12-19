@@ -8,10 +8,10 @@ contract CuratorCheckScript is Script {
     function run() public {
         vm.startBroadcast();
 
-        address _curatorAddress = 0xDB259fa7d7f9F68aE3ffC3c748516ba9567a7576;
+        address _curatorAddress = 0x71d75C9A9e1a4fFa5a16556b51D6e630A4FA902A;
         Curator _curator = Curator(_curatorAddress);
 
-        _curator.optIn(0xa0Ee7A142d267C1f36714E4a8F75612F20a79720, 0x23618e81E3f5cdF7f54C3d65f7FBc0aBf5B21E8f, 1, 1, 1, 10);
+        _curator.optIn(0x23618e81E3f5cdF7f54C3d65f7FBc0aBf5B21E8f, 1, 2, 400, 450);
 
         vm.stopBroadcast();
     }
