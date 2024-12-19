@@ -6,161 +6,185 @@ import {IStakingModule} from "../interfaces/IStakingModule.sol";
 
 contract Curator {
     event Succeeded(
-       address sender,
-       address rewardAddress,
-       address proxyKey,
-       uint256 moduleId,
-       uint256 operatorId,
-       uint256 keysRangeStart,
-       uint256 keysRangeEnd
+        address sender,
+        address rewardAddress,
+        address proxyKey,
+        uint256 moduleId,
+        uint256 operatorId,
+        uint256 keysRangeStart,
+        uint256 keysRangeEnd
     );
 
-    error ModuleIdCheckFailed(
-       address sender,
-       uint256 moduleId,
-       uint256 totalModulesCount
-    );
+    error ModuleIdCheckFailed(address sender, uint256 moduleId, uint256 totalModulesCount);
 
-    error OperatorIdCheckFailed(
-       address sender,
-       uint256 moduleId,
-       uint256 operatorId,
-       uint256 totalOperatorsCount
-    );
+    error OperatorIdCheckFailed(address sender, uint256 moduleId, uint256 operatorId, uint256 totalOperatorsCount);
 
-    error OperatorNotActive(
-       address sender,
-       uint256 operatorId
-    );
+    error OperatorNotActive(address sender, uint256 operatorId);
 
-    error OperatorAlreadyRegistered(
-       address sender,
-       address operatorRewardAddress,
-       uint256 moduleId,
-       uint256 operatorId
-    );
+    error OperatorAlreadyRegistered(address sender, uint256 moduleId, uint256 operatorId);
 
-    error RewardAddressMismatch(
-       address sender,
-       uint256 operatorId,
-       address operatorRewardAddress
-    );
+    error OperatorNotRegistered(address sender, uint256 moduleId, uint256 operatorId, address operatorRewardAddress);
+
+    error RewardAddressMismatch(address sender, uint256 operatorId, address operatorRewardAddress);
 
     error KeysIndexMismatch(
-       address sender,
-       uint256 moduleId,
-       uint256 operatorId,
-       uint256 keysRangeStart,
-       uint256 keysRangeEnd,
-       uint64 totalExitedValidators,
-       uint64 totalAddedValidators
+        address sender,
+        uint256 moduleId,
+        uint256 operatorId,
+        uint256 keysRangeStart,
+        uint256 keysRangeEnd,
+        uint64 totalExitedValidators,
+        uint64 totalAddedValidators
     );
 
     struct RegisteredOperator {
-       address proxyKey;
-       uint256 moduleId;
-       uint256 operatorId;
-       uint256 keysRangeStart;
-       uint256 keysRangeEnd;
+        bool isActive;
+        address proxyKey;
+        uint256 moduleId;
+        uint256 operatorId;
+        uint256 keysRangeStart;
+        uint256 keysRangeEnd;
     }
 
-    address immutable public stakingRouterAddress;
+    address public immutable stakingRouterAddress;
+    address public immutable managerAddress;
 
     mapping(address => RegisteredOperator) public operators;
 
-    constructor(address _stakingRouterAddress) {
-       stakingRouterAddress = _stakingRouterAddress;
+    constructor(address _stakingRouterAddress, address _managerAddress) {
+        stakingRouterAddress = _stakingRouterAddress;
+        managerAddress = _managerAddress;
     }
 
-    function optIn(
-       address proxyKey,
-       uint256 moduleId,
-       uint256 operatorId,
-       uint256 keysRangeStart,
-       uint256 keysRangeEnd
-    ) public {
-       IStakingRouter router = IStakingRouter(payable(stakingRouterAddress));
+    function optIn(address proxyKey, uint256 moduleId, uint256 operatorId, uint256 keysRangeStart, uint256 keysRangeEnd)
+        public
+    {
+        IStakingRouter router = IStakingRouter(payable(stakingRouterAddress));
 
-       uint256 modulesCount = router.getStakingModulesCount();
+        _checkModuleId(router, msg.sender, moduleId);
 
-       if (moduleId < 1 || moduleId > modulesCount) {
-          revert ModuleIdCheckFailed(msg.sender, moduleId, modulesCount);
-       }
+        address moduleAddress = router.getStakingModule(moduleId).stakingModuleAddress;
 
-       address moduleAddress = router.getStakingModule(moduleId).stakingModuleAddress;
+        IStakingModule module = IStakingModule(moduleAddress);
 
-       IStakingModule module = IStakingModule(moduleAddress);
+        _checkOperatorId(module, msg.sender, moduleId, operatorId);
 
-       uint256 nodeOperatorsCount = module.getNodeOperatorsCount();
+        address operatorRewardAddress =
+            _checkOperatorAndGetRewardAddress(module, moduleId, operatorId, keysRangeStart, keysRangeEnd);
 
-       if (operatorId > nodeOperatorsCount) {
-          revert OperatorIdCheckFailed(msg.sender, moduleId, operatorId, nodeOperatorsCount);
-       }
-
-       address operatorRewardAddress = _checkOperatorAndGetRewardAddress(
-          module,
-          moduleId,
-          operatorId,
-          keysRangeStart,
-          keysRangeEnd
-       );
-
-       // @todo Uncomment when we create test node operator in 3rd module
-       /*if (msg.sender != operatorRewardAddress) {
+        // @todo Uncomment when we create test node operator in 3rd module
+        /*if (msg.sender != operatorRewardAddress) {
           revert RewardAddressMismatch(msg.sender, operatorId, operatorRewardAddress);
        }*/
 
-       if (operators[operatorRewardAddress].moduleId != 0 && operators[operatorRewardAddress].operatorId != 0) {
-          revert OperatorAlreadyRegistered(msg.sender, operatorRewardAddress, moduleId, operatorId);
-       }
+        if (operators[operatorRewardAddress].isActive) {
+            revert OperatorAlreadyRegistered(msg.sender, moduleId, operatorId);
+        }
 
-       operators[operatorRewardAddress] = RegisteredOperator({
-          proxyKey: proxyKey,
-          moduleId: moduleId,
-          operatorId: operatorId,
-          keysRangeStart: keysRangeStart,
-          keysRangeEnd: keysRangeEnd
-       });
+        operators[operatorRewardAddress] = RegisteredOperator({
+            isActive: true,
+            proxyKey: proxyKey,
+            moduleId: moduleId,
+            operatorId: operatorId,
+            keysRangeStart: keysRangeStart,
+            keysRangeEnd: keysRangeEnd
+        });
 
-       emit Succeeded(msg.sender, operatorRewardAddress, proxyKey, moduleId, operatorId, keysRangeStart, keysRangeEnd);
+        emit Succeeded(msg.sender, operatorRewardAddress, proxyKey, moduleId, operatorId, keysRangeStart, keysRangeEnd);
+    }
+
+    function optOut(uint256 moduleId, uint256 operatorId) public {
+        IStakingRouter router = IStakingRouter(payable(stakingRouterAddress));
+
+        _checkModuleId(router, msg.sender, moduleId);
+
+        address moduleAddress = router.getStakingModule(moduleId).stakingModuleAddress;
+
+        IStakingModule module = IStakingModule(moduleAddress);
+
+        _checkOperatorId(module, msg.sender, moduleId, operatorId);
+
+        address operatorRewardAddress = _getOperatorRewardAddress(module, operatorId);
+
+        if (msg.sender != operatorRewardAddress && msg.sender != managerAddress) {
+            revert RewardAddressMismatch(msg.sender, operatorId, operatorRewardAddress);
+        }
+
+        if (!operators[operatorRewardAddress].isActive) {
+            revert OperatorNotRegistered(msg.sender, moduleId, operatorId, operatorRewardAddress);
+        }
+
+        operators[operatorRewardAddress].isActive = false;
+    }
+
+    function _checkModuleId(IStakingRouter router, address sender, uint256 moduleId) internal {
+        uint256 modulesCount = router.getStakingModulesCount();
+
+        if (moduleId < 1 || moduleId > modulesCount) {
+            revert ModuleIdCheckFailed(sender, moduleId, modulesCount);
+        }
+    }
+
+    function _checkOperatorId(IStakingModule module, address sender, uint256 moduleId, uint256 operatorId) internal {
+        uint256 nodeOperatorsCount = module.getNodeOperatorsCount();
+
+        if (operatorId > nodeOperatorsCount) {
+            revert OperatorIdCheckFailed(sender, moduleId, operatorId, nodeOperatorsCount);
+        }
+    }
+
+    function _getOperatorRewardAddress(IStakingModule module, uint256 operatorId)
+        internal
+        view
+        returns (address operatorRewardAddress)
+    {
+        (
+            bool isOperatorActive,
+            string memory operatorName,
+            address rewardAddress,
+            uint64 totalVettedValidators,
+            uint64 totalExitedValidators,
+            uint64 totalAddedValidators
+        ) = module.getNodeOperator(operatorId, true);
+
+        operatorRewardAddress = rewardAddress;
     }
 
     function _checkOperatorAndGetRewardAddress(
-       IStakingModule module,
-       uint256 moduleId,
-       uint256 operatorId,
-       uint256 keysRangeStart,
-       uint256 keysRangeEnd
+        IStakingModule module,
+        uint256 moduleId,
+        uint256 operatorId,
+        uint256 keysRangeStart,
+        uint256 keysRangeEnd
     ) internal returns (address operatorRewardAddress) {
-       (
-          bool isOperatorActive,
-          string memory operatorName,
-          address rewardAddress,
-          uint64 totalVettedValidators,
-          uint64 totalExitedValidators,
-          uint64 totalAddedValidators
-       ) = module.getNodeOperator(operatorId, true);
+        (
+            bool isOperatorActive,
+            string memory operatorName,
+            address rewardAddress,
+            uint64 totalVettedValidators,
+            uint64 totalExitedValidators,
+            uint64 totalAddedValidators
+        ) = module.getNodeOperator(operatorId, true);
 
-       if (!isOperatorActive) {
-          revert OperatorNotActive(msg.sender, operatorId);
-       }
+        if (!isOperatorActive) {
+            revert OperatorNotActive(msg.sender, operatorId);
+        }
 
-       if (
-          totalExitedValidators > keysRangeStart ||
-          totalAddedValidators < keysRangeEnd ||
-          keysRangeEnd < keysRangeStart
-       ) {
-          revert KeysIndexMismatch(
-             msg.sender,
-             moduleId,
-             operatorId,
-             keysRangeStart,
-             keysRangeEnd,
-             totalExitedValidators,
-             totalAddedValidators
-          );
-       }
+        if (
+            totalExitedValidators > keysRangeStart || totalAddedValidators < keysRangeEnd
+                || keysRangeEnd < keysRangeStart
+        ) {
+            revert KeysIndexMismatch(
+                msg.sender,
+                moduleId,
+                operatorId,
+                keysRangeStart,
+                keysRangeEnd,
+                totalExitedValidators,
+                totalAddedValidators
+            );
+        }
 
-       operatorRewardAddress = rewardAddress;
+        operatorRewardAddress = rewardAddress;
     }
 }

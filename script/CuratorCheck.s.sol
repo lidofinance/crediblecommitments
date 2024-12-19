@@ -12,6 +12,7 @@ contract CuratorCheckScript is Script {
         Curator _curator = Curator(_curatorAddress);
 
         _curator.optIn(0x23618e81E3f5cdF7f54C3d65f7FBc0aBf5B21E8f, 1, 2, 400, 450);
+        _curator.optOut(1, 2);
 
         vm.stopBroadcast();
     }
