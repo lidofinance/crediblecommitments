@@ -117,6 +117,35 @@ contract Curator {
         operators[operatorRewardAddress].isActive = false;
     }
 
+    function updateKeysRange(uint256 moduleId, uint256 operatorId, uint256 newKeysRangeStart, uint256 newKeysRangeEnd)
+        public
+    {
+        IStakingRouter router = IStakingRouter(payable(stakingRouterAddress));
+
+        _checkModuleId(router, msg.sender, moduleId);
+
+        address moduleAddress = router.getStakingModule(moduleId).stakingModuleAddress;
+
+        IStakingModule module = IStakingModule(moduleAddress);
+
+        _checkOperatorId(module, msg.sender, moduleId, operatorId);
+
+        address operatorRewardAddress =
+            _checkOperatorAndGetRewardAddress(module, moduleId, operatorId, newKeysRangeStart, newKeysRangeEnd);
+
+        // @todo Uncomment when we create test node operator in 3rd module
+        /*if (msg.sender != operatorRewardAddress) {
+            revert RewardAddressMismatch(msg.sender, operatorId, operatorRewardAddress);
+        }*/
+
+        if (!operators[operatorRewardAddress].isActive) {
+            revert OperatorNotRegistered(msg.sender, moduleId, operatorId, operatorRewardAddress);
+        }
+
+        operators[operatorRewardAddress].keysRangeStart = newKeysRangeStart;
+        operators[operatorRewardAddress].keysRangeEnd = newKeysRangeEnd;
+    }
+
     function _checkModuleId(IStakingRouter router, address sender, uint256 moduleId) internal {
         uint256 modulesCount = router.getStakingModulesCount();
 
