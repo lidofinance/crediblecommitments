@@ -140,6 +140,8 @@ contract Curator {
 
         _checkOperatorId(module, msg.sender, moduleId, operatorId);
 
+        _checkMaxValidators(moduleId, newKeysRangeStart, newKeysRangeEnd);
+
         address operatorRewardAddress =
             _checkOperatorAndGetRewardAddress(module, moduleId, operatorId, newKeysRangeStart, newKeysRangeEnd);
 
