@@ -11,7 +11,7 @@ contract CuratorDeployScript is Script {
         address _holeskyStakingRouter = 0xd6EbF043D30A7fe46D1Db32BA90a0A51207FE229;
 
         // @todo Insert real address here once manager multisig is set up
-        address _managerAddress = 0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266;
+        address _managerAddress = 0xC9aC09D59e4697c3b68063b93c7bc41964690408;
 
         Curator _curator = new Curator(_holeskyStakingRouter, _managerAddress);
 

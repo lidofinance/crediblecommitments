@@ -5,30 +5,29 @@ import {IStakingRouter, StakingModule} from "../interfaces/IStakingRouter.sol";
 import {IStakingModule} from "../interfaces/IStakingModule.sol";
 
 contract Curator {
-    event Succeeded(
-        address sender,
+    event OptInSucceeded(
         address rewardAddress,
-        address proxyKey,
+        address optInAddress,
+        string rpcURL,
         uint256 moduleId,
         uint256 operatorId,
         uint256 keysRangeStart,
         uint256 keysRangeEnd
     );
 
-    error ModuleIdCheckFailed(address sender, uint256 moduleId, uint256 totalModulesCount);
+    error ModuleIdCheckFailed(uint256 moduleId, uint256 totalModulesCount);
 
-    error OperatorIdCheckFailed(address sender, uint256 moduleId, uint256 operatorId, uint256 totalOperatorsCount);
+    error OperatorIdCheckFailed(uint256 moduleId, uint256 operatorId, uint256 totalOperatorsCount);
 
-    error OperatorNotActive(address sender, uint256 operatorId);
+    error OperatorNotActive(uint256 moduleId, uint256 operatorId);
 
-    error OperatorAlreadyRegistered(address sender, uint256 moduleId, uint256 operatorId);
+    error OperatorAlreadyRegistered(uint256 moduleId, uint256 operatorId);
 
-    error OperatorNotRegistered(address sender, uint256 moduleId, uint256 operatorId, address operatorRewardAddress);
+    error OperatorNotRegistered(uint256 moduleId, uint256 operatorId, address operatorRewardAddress);
 
     error RewardAddressMismatch(address sender, uint256 operatorId, address operatorRewardAddress);
 
     error KeysIndexMismatch(
-        address sender,
         uint256 moduleId,
         uint256 operatorId,
         uint256 keysRangeStart,
@@ -39,7 +38,8 @@ contract Curator {
 
     struct RegisteredOperator {
         bool isActive;
-        address proxyKey;
+        address optInAddress;
+        string rpcURL;
         uint256 moduleId;
         uint256 operatorId;
         uint256 keysRangeStart;
@@ -64,55 +64,55 @@ contract Curator {
         managerAddress = _managerAddress;
     }
 
-    function optIn(address proxyKey, uint256 moduleId, uint256 operatorId, uint256 keysRangeStart, uint256 keysRangeEnd)
+    function optIn(address optInAddress, string memory rpcURL, uint256 moduleId, uint256 operatorId, uint256 keysRangeStart, uint256 keysRangeEnd)
         public
     {
         IStakingRouter router = IStakingRouter(payable(stakingRouterAddress));
 
-        _checkModuleId(router, msg.sender, moduleId);
+        _checkModuleId(router, moduleId);
 
         address moduleAddress = router.getStakingModule(moduleId).stakingModuleAddress;
 
         IStakingModule module = IStakingModule(moduleAddress);
 
-        _checkOperatorId(module, msg.sender, moduleId, operatorId);
+        _checkOperatorId(module, moduleId, operatorId);
 
         address operatorRewardAddress =
             _checkOperatorAndGetRewardAddress(module, moduleId, operatorId, keysRangeStart, keysRangeEnd);
 
         _checkMaxValidators(moduleId, keysRangeStart, keysRangeEnd);
 
-        // @todo Uncomment when we create test node operator in 3rd module
-        /*if (msg.sender != operatorRewardAddress) {
+        if (msg.sender != operatorRewardAddress) {
           revert RewardAddressMismatch(msg.sender, operatorId, operatorRewardAddress);
-       }*/
+        }
 
         if (operators[operatorRewardAddress].isActive) {
-            revert OperatorAlreadyRegistered(msg.sender, moduleId, operatorId);
+            revert OperatorAlreadyRegistered(moduleId, operatorId);
         }
 
         operators[operatorRewardAddress] = RegisteredOperator({
             isActive: true,
-            proxyKey: proxyKey,
+            optInAddress: optInAddress,
+            rpcURL: rpcURL,
             moduleId: moduleId,
             operatorId: operatorId,
             keysRangeStart: keysRangeStart,
             keysRangeEnd: keysRangeEnd
         });
 
-        emit Succeeded(msg.sender, operatorRewardAddress, proxyKey, moduleId, operatorId, keysRangeStart, keysRangeEnd);
+        emit OptInSucceeded(operatorRewardAddress, optInAddress, rpcURL, moduleId, operatorId, keysRangeStart, keysRangeEnd);
     }
 
     function optOut(uint256 moduleId, uint256 operatorId) public {
         IStakingRouter router = IStakingRouter(payable(stakingRouterAddress));
 
-        _checkModuleId(router, msg.sender, moduleId);
+        _checkModuleId(router, moduleId);
 
         address moduleAddress = router.getStakingModule(moduleId).stakingModuleAddress;
 
         IStakingModule module = IStakingModule(moduleAddress);
 
-        _checkOperatorId(module, msg.sender, moduleId, operatorId);
+        _checkOperatorId(module, moduleId, operatorId);
 
         address operatorRewardAddress = _getOperatorRewardAddress(module, operatorId);
 
@@ -121,7 +121,7 @@ contract Curator {
         }
 
         if (!operators[operatorRewardAddress].isActive) {
-            revert OperatorNotRegistered(msg.sender, moduleId, operatorId, operatorRewardAddress);
+            revert OperatorNotRegistered(moduleId, operatorId, operatorRewardAddress);
         }
 
         operators[operatorRewardAddress].isActive = false;
@@ -132,30 +132,51 @@ contract Curator {
     {
         IStakingRouter router = IStakingRouter(payable(stakingRouterAddress));
 
-        _checkModuleId(router, msg.sender, moduleId);
+        _checkModuleId(router, moduleId);
 
         address moduleAddress = router.getStakingModule(moduleId).stakingModuleAddress;
 
         IStakingModule module = IStakingModule(moduleAddress);
 
-        _checkOperatorId(module, msg.sender, moduleId, operatorId);
+        _checkOperatorId(module, moduleId, operatorId);
 
         _checkMaxValidators(moduleId, newKeysRangeStart, newKeysRangeEnd);
 
         address operatorRewardAddress =
             _checkOperatorAndGetRewardAddress(module, moduleId, operatorId, newKeysRangeStart, newKeysRangeEnd);
 
-        // @todo Uncomment when we create test node operator in 3rd module
-        /*if (msg.sender != operatorRewardAddress) {
+        if (msg.sender != operatorRewardAddress) {
             revert RewardAddressMismatch(msg.sender, operatorId, operatorRewardAddress);
-        }*/
+        }
 
         if (!operators[operatorRewardAddress].isActive) {
-            revert OperatorNotRegistered(msg.sender, moduleId, operatorId, operatorRewardAddress);
+            revert OperatorNotRegistered(moduleId, operatorId, operatorRewardAddress);
         }
 
         operators[operatorRewardAddress].keysRangeStart = newKeysRangeStart;
         operators[operatorRewardAddress].keysRangeEnd = newKeysRangeEnd;
+    }
+
+    function getOperator(address rewardAddress) public view returns (
+        bool isActive,
+        address optInAddress,
+        string memory rpcURL,
+        uint256 moduleId,
+        uint256 operatorId,
+        uint256 keysRangeStart,
+        uint256 keysRangeEnd
+    ) {
+        RegisteredOperator memory operator = operators[rewardAddress];
+
+        return (
+            operator.isActive,
+            operator.optInAddress,
+            operator.rpcURL,
+            operator.moduleId,
+            operator.operatorId,
+            operator.keysRangeStart,
+            operator.keysRangeEnd
+        );
     }
 
     function setMaxValidatorsForStakingModule(uint256 moduleId, uint256 maxValidators) external onlyOwner {
@@ -173,19 +194,19 @@ contract Curator {
         require(totalKeys <= maxValidators, "Validator limit exceeded for module");
     }
 
-    function _checkModuleId(IStakingRouter router, address sender, uint256 moduleId) internal {
+    function _checkModuleId(IStakingRouter router, uint256 moduleId) internal {
         uint256 modulesCount = router.getStakingModulesCount();
 
         if (moduleId < 1 || moduleId > modulesCount) {
-            revert ModuleIdCheckFailed(sender, moduleId, modulesCount);
+            revert ModuleIdCheckFailed(moduleId, modulesCount);
         }
     }
 
-    function _checkOperatorId(IStakingModule module, address sender, uint256 moduleId, uint256 operatorId) internal {
+    function _checkOperatorId(IStakingModule module, uint256 moduleId, uint256 operatorId) internal {
         uint256 nodeOperatorsCount = module.getNodeOperatorsCount();
 
         if (operatorId > nodeOperatorsCount) {
-            revert OperatorIdCheckFailed(sender, moduleId, operatorId, nodeOperatorsCount);
+            revert OperatorIdCheckFailed(moduleId, operatorId, nodeOperatorsCount);
         }
     }
 
@@ -223,7 +244,7 @@ contract Curator {
         ) = module.getNodeOperator(operatorId, true);
 
         if (!isOperatorActive) {
-            revert OperatorNotActive(msg.sender, operatorId);
+            revert OperatorNotActive(moduleId, operatorId);
         }
 
         if (
@@ -231,7 +252,6 @@ contract Curator {
                 || keysRangeEnd < keysRangeStart
         ) {
             revert KeysIndexMismatch(
-                msg.sender,
                 moduleId,
                 operatorId,
                 keysRangeStart,
