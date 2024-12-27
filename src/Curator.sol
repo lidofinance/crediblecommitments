@@ -2,7 +2,7 @@
 pragma solidity ^0.8.13;
 
 import {IStakingRouter, StakingModule} from "../interfaces/IStakingRouter.sol";
-import {IStakingModule} from "../interfaces/IStakingModule.sol";
+import {CSMNodeOperator, IStakingModule, ICuratedModule, ICSModule} from "../interfaces/IStakingModule.sol";
 
 contract Curator {
     event OptInSucceeded(
@@ -32,7 +32,6 @@ contract Curator {
         uint256 operatorId,
         uint256 keysRangeStart,
         uint256 keysRangeEnd,
-        uint64 totalExitedValidators,
         uint64 totalAddedValidators
     );
 
@@ -76,11 +75,10 @@ contract Curator {
         IStakingModule module = IStakingModule(moduleAddress);
 
         _checkOperatorId(module, moduleId, operatorId);
-
-        address operatorRewardAddress =
-            _checkOperatorAndGetRewardAddress(module, moduleId, operatorId, keysRangeStart, keysRangeEnd);
-
+        _checkOperatorData(moduleAddress, moduleId, operatorId, keysRangeStart, keysRangeEnd);
         _checkMaxValidators(moduleId, keysRangeStart, keysRangeEnd);
+
+        address operatorRewardAddress = _getOperatorRewardAddress(moduleAddress, moduleId, operatorId);
 
         if (msg.sender != operatorRewardAddress) {
           revert RewardAddressMismatch(msg.sender, operatorId, operatorRewardAddress);
@@ -114,7 +112,7 @@ contract Curator {
 
         _checkOperatorId(module, moduleId, operatorId);
 
-        address operatorRewardAddress = _getOperatorRewardAddress(module, operatorId);
+        address operatorRewardAddress = _getOperatorRewardAddress(moduleAddress, moduleId, operatorId);
 
         if (msg.sender != operatorRewardAddress && msg.sender != managerAddress) {
             revert RewardAddressMismatch(msg.sender, operatorId, operatorRewardAddress);
@@ -139,11 +137,10 @@ contract Curator {
         IStakingModule module = IStakingModule(moduleAddress);
 
         _checkOperatorId(module, moduleId, operatorId);
-
+        _checkOperatorData(moduleAddress, moduleId, operatorId, newKeysRangeStart, newKeysRangeEnd);
         _checkMaxValidators(moduleId, newKeysRangeStart, newKeysRangeEnd);
 
-        address operatorRewardAddress =
-            _checkOperatorAndGetRewardAddress(module, moduleId, operatorId, newKeysRangeStart, newKeysRangeEnd);
+        address operatorRewardAddress = _getOperatorRewardAddress(moduleAddress, moduleId, operatorId);
 
         if (msg.sender != operatorRewardAddress) {
             revert RewardAddressMismatch(msg.sender, operatorId, operatorRewardAddress);
@@ -186,7 +183,7 @@ contract Curator {
         maxValidatorsForModule[moduleId] = maxValidators;
     }
 
-    function _checkMaxValidators(uint256 moduleId, uint256 keysRangeStart, uint256 keysRangeEnd) internal {
+    function _checkMaxValidators(uint256 moduleId, uint256 keysRangeStart, uint256 keysRangeEnd) internal view {
         uint256 totalKeys = keysRangeEnd - keysRangeStart + 1;
         uint256 maxValidators =
             maxValidatorsForModule[moduleId] == 0 ? DEFAULT_MAX_VALIDATORS : maxValidatorsForModule[moduleId];
@@ -194,7 +191,7 @@ contract Curator {
         require(totalKeys <= maxValidators, "Validator limit exceeded for module");
     }
 
-    function _checkModuleId(IStakingRouter router, uint256 moduleId) internal {
+    function _checkModuleId(IStakingRouter router, uint256 moduleId) internal view {
         uint256 modulesCount = router.getStakingModulesCount();
 
         if (moduleId < 1 || moduleId > modulesCount) {
@@ -202,65 +199,80 @@ contract Curator {
         }
     }
 
-    function _checkOperatorId(IStakingModule module, uint256 moduleId, uint256 operatorId) internal {
+    function _checkOperatorId(IStakingModule module, uint256 moduleId, uint256 operatorId) internal view {
         uint256 nodeOperatorsCount = module.getNodeOperatorsCount();
 
-        if (operatorId > nodeOperatorsCount) {
+        if (operatorId >= nodeOperatorsCount) {
             revert OperatorIdCheckFailed(moduleId, operatorId, nodeOperatorsCount);
         }
     }
 
-    function _getOperatorRewardAddress(IStakingModule module, uint256 operatorId)
-        internal
-        view
-        returns (address operatorRewardAddress)
-    {
-        (
-            bool isOperatorActive,
-            string memory operatorName,
-            address rewardAddress,
-            uint64 totalVettedValidators,
-            uint64 totalExitedValidators,
-            uint64 totalAddedValidators
-        ) = module.getNodeOperator(operatorId, true);
+    function _getOperatorData(address moduleAddress, uint256 moduleId, uint256 operatorId) internal view returns (
+        bool isOperatorActive,
+        address rewardAddress,
+        uint64 totalAddedValidators
+    ) {
+        if (moduleId != 4) {
+            ICuratedModule module = ICuratedModule(moduleAddress);
 
-        operatorRewardAddress = rewardAddress;
+            (
+                isOperatorActive,
+                ,
+                rewardAddress,
+                ,
+                ,
+                totalAddedValidators
+            ) = module.getNodeOperator(operatorId, true);
+        } else {
+            ICSModule module = ICSModule(moduleAddress);
+
+            isOperatorActive = module.getNodeOperatorIsActive(operatorId);
+
+            CSMNodeOperator memory operator = module.getNodeOperator(operatorId);
+
+            rewardAddress = operator.rewardAddress;
+            totalAddedValidators = operator.totalAddedKeys;
+        }
     }
 
-    function _checkOperatorAndGetRewardAddress(
-        IStakingModule module,
+    function _getOperatorRewardAddress(address moduleAddress, uint256 moduleId, uint256 operatorId)
+        internal
+        view
+        returns (address rewardAddress)
+    {
+        (
+            ,
+            rewardAddress,
+        ) = _getOperatorData(moduleAddress, moduleId, operatorId);
+    }
+
+    function _checkOperatorData(
+        address moduleAddress,
         uint256 moduleId,
         uint256 operatorId,
         uint256 keysRangeStart,
         uint256 keysRangeEnd
-    ) internal returns (address operatorRewardAddress) {
+    ) internal view {
         (
             bool isOperatorActive,
-            string memory operatorName,
-            address rewardAddress,
-            uint64 totalVettedValidators,
-            uint64 totalExitedValidators,
+            ,
             uint64 totalAddedValidators
-        ) = module.getNodeOperator(operatorId, true);
+        ) = _getOperatorData(moduleAddress, moduleId, operatorId);
 
         if (!isOperatorActive) {
             revert OperatorNotActive(moduleId, operatorId);
         }
 
         if (
-            totalExitedValidators > keysRangeStart || totalAddedValidators < keysRangeEnd
-                || keysRangeEnd < keysRangeStart
+            totalAddedValidators < keysRangeEnd || keysRangeEnd < keysRangeStart
         ) {
             revert KeysIndexMismatch(
                 moduleId,
                 operatorId,
                 keysRangeStart,
                 keysRangeEnd,
-                totalExitedValidators,
                 totalAddedValidators
             );
         }
-
-        operatorRewardAddress = rewardAddress;
     }
 }
