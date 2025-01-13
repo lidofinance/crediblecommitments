@@ -1,6 +1,34 @@
 [profile.default]
+solc = "0.8.24"
+evm_version = "cancun"
+optimizer = true
+optimizer_runs = 250
+bytecode_hash = "none" # The metadata hash removed from the bytecode (not the metadata itself).
+ffi = true
+ast = true
+build_info = true
+# uncomment this to inspect storage layouts in build artifacts
+extra_output = ["storageLayout"]
+
 src = "src"
 out = "out"
 libs = ["lib"]
+cache_path  = "cache"
+
+
+block_gas_limit = 30_000_000
+fuzz = { runs = 256 }
+
+# gas_reports = [
+# ]
+
+[profile.ci]
+verbosity = 3
+fuzz = { runs = 10_000, max_test_rejects = 2_000_000 }
+
+[profile.coverage]
+# due to coverage running with optimizer disabled, we need to increase the gas limit
+# to fit CSM contract tests in one block
+block_gas_limit = 60_000_000
 
 # See more config options https://github.com/foundry-rs/foundry/blob/master/crates/config/README.md#all-options

@@ -1,16 +1,24 @@
-# Compiler files
+node_modules/
+
+.env
+.idea
+.vscode
+.direnv
+.DS_Store
+
+# Foundry files
+broadcast/
 cache/
 out/
+localhost.json
+lcov.info
 
-# Ignores development broadcast logs
-/broadcast
-/broadcast/*/31337/
-/broadcast/**/dry-run/
+# Yarn
+.yarn/*
+!.yarn/patches
+!.yarn/plugins
+!.yarn/releases
+!.yarn/sdks
+!.yarn/versions
 
-# Docs
-docs/
-
-# Dotenv file
-.env
-
-.idea
+lib/*

@@ -1,0 +1,26 @@
+{
+  "name": "credible-commitment-curation-provider",
+  "version": "0.0.1",
+  "description": "Credible Commitment Curation Provider",
+  "repository": "https://github.com/lidofinance/crediblecommitments.git",
+  "author": "Credible Commitments Team @lido.fi",
+  "license": "GPL-3.0",
+  "private": true,
+  "scripts": {
+    "lint:solhint": "solhint './src/**/*.sol'",
+    "lint:check": "prettier --check **.sol && yarn lint:solhint",
+    "lint:fix": "prettier --write **.sol"
+  },
+  "devDependencies": {
+    "husky": "^9.1.7",
+    "lint-staged": "^15.3.0",
+    "prettier": "^3.4.2",
+    "prettier-plugin-solidity": "^1.4.2",
+    "solhint": "5.0.4"
+  },
+  "lint-staged": {
+    "*": "prettier --ignore-unknown --write",
+    "src/**/*.sol": "solhint"
+  },
+  "packageManager": "yarn@4.6.0"
+}
