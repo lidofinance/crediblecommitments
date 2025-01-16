@@ -24,6 +24,5 @@ struct CSMNodeOperator {
 }
 
 interface ICSModule is IStakingModule {
-    function getNodeOperatorIsActive(uint256 nodeOperatorId) external view returns (bool);
     function getNodeOperator(uint256 operatorId) external view returns (CSMNodeOperator memory);
 }
