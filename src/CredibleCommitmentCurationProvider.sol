@@ -7,7 +7,6 @@ import {Initializable} from "@openzeppelin/contracts-upgradeable/proxy/utils/Ini
 import {AccessControlEnumerableUpgradeable} from
     "@openzeppelin/contracts-upgradeable/access/extensions/AccessControlEnumerableUpgradeable.sol";
 import {PausableUpgradeable} from "@openzeppelin/contracts-upgradeable/utils/PausableUpgradeable.sol";
-import {UUPSUpgradeable} from "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 
 import {
     CCCPDataStorage as DS,
@@ -29,8 +28,7 @@ import {ICuratedModule} from "./interfaces/ICuratedModule.sol";
 contract CredibleCommitmentCurationProvider is
     Initializable,
     AccessControlEnumerableUpgradeable,
-    PausableUpgradeable,
-    UUPSUpgradeable
+    PausableUpgradeable
 {
     struct StakingModuleCache {
         bool _cached;
@@ -94,7 +92,6 @@ contract CredibleCommitmentCurationProvider is
     error InvalidModuleStatus();
     error InvalidOperatorId();
     error ZeroCommitteeAddress();
-    error ZeroAdminAddress();
     error ZeroOperatorManagerAddress();
     error ZeroLocatorAddress();
 
@@ -110,17 +107,15 @@ contract CredibleCommitmentCurationProvider is
 
     function initialize(
         address committeeAddress,
-        address adminAddress,
         uint64 optInMinDurationBlocks,
         uint64 optOutDelayDurationBlocks
     ) external initializer {
         if (committeeAddress == address(0)) revert ZeroCommitteeAddress();
-        if (adminAddress == address(0)) revert ZeroAdminAddress();
 
         __Pausable_init();
         __AccessControlEnumerable_init();
 
-        _grantRole(DEFAULT_ADMIN_ROLE, adminAddress);
+        _grantRole(DEFAULT_ADMIN_ROLE, committeeAddress);
         _grantRole(COMMITTEE_ROLE, committeeAddress);
 
         _setConfigOptInOutDurations(optInMinDurationBlocks, optOutDelayDurationBlocks);
@@ -571,13 +566,5 @@ contract CredibleCommitmentCurationProvider is
             rewardAddress: rewardAddress,
             totalKeys: totalKeys
         });
-    }
-
-    /// SERVICE FUNCTIONS
-
-    /// @notice UUPS proxy upgrade authorization
-    /// @dev Only the default admin role can authorize an upgrade
-    function _authorizeUpgrade(address) internal view override {
-        _checkRole(DEFAULT_ADMIN_ROLE);
     }
 }
