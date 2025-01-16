@@ -215,7 +215,6 @@ contract CredibleCommitmentCurationProvider is
             revert OperatorOptInNotAllowed();
         }
 
-        // (newKeyIndexRangeStart, newKeyIndexRangeEnd) = _fixKeyIndexes(newKeyIndexRangeStart, newKeyIndexRangeEnd);
         _checkKeysRangeIsValid(cache.noCache.totalKeys, newKeyIndexRangeStart, newKeyIndexRangeEnd);
         _checkModuleParams(moduleId, newKeyIndexRangeStart, newKeyIndexRangeEnd);
 
@@ -267,9 +266,6 @@ contract CredibleCommitmentCurationProvider is
         _prepStateCache(cache, moduleId, operatorId);
         address rewardAddress = cache.noCache.rewardAddress;
         address linkedManagerAddress = DS._getOperatorManager(rewardAddress);
-        // if (linkedManagerAddress != managerAddress) {
-        //     revert ManagerAddressMismatch();
-        // }
         if (linkedManagerAddress == address(0)) {
             revert OperatorNotRegistered();
         }
@@ -292,19 +288,8 @@ contract CredibleCommitmentCurationProvider is
     function updateKeysRange(uint64 newKeyIndexRangeStart, uint64 newKeyIndexRangeEnd) external whenNotPaused {
         address managerAddress = msg.sender;
 
-        OperatorAttributes memory attr = DS._getOperatorAttributes(managerAddress);
-        if (attr.moduleId == 0) {
-            revert OperatorNotRegistered();
-        }
-
         StateCache memory cache;
-        /// @dev correctness of moduleId and operatorId are checked inside
-        _prepStateCache(cache, attr.moduleId, attr.operatorId);
-        address rewardAddress = cache.noCache.rewardAddress;
-        address linkedManagerAddress = DS._getOperatorManager(rewardAddress);
-        if (linkedManagerAddress != managerAddress) {
-            revert ManagerAddressMismatch();
-        }
+        _checkOperatorByManagerAddress(cache, managerAddress);
 
         OperatorOptInOutFlags memory flags = _calcOptInOutFlags(DS._getOperatorOptInOutState(managerAddress));
         if (!flags.isOptedIn) {
@@ -319,7 +304,6 @@ contract CredibleCommitmentCurationProvider is
             revert KeyIndexMismatch();
         }
 
-        // (newKeyIndexRangeStart, newKeyIndexRangeEnd) = _fixKeyIndexes(newKeyIndexRangeStart, newKeyIndexRangeEnd);
         _checkKeysRangeIsValid(cache.noCache.totalKeys, newKeyIndexRangeStart, newKeyIndexRangeEnd);
         _checkModuleParams(cache.noCache.moduleId, newKeyIndexRangeStart, newKeyIndexRangeEnd);
 
@@ -487,18 +471,6 @@ contract CredibleCommitmentCurationProvider is
             optOutAllowed: optOutAllowed
         });
     }
-
-    // function _fixKeyIndexes(uint256 startIndex, uint256 endIndex)
-    //     internal
-    //     pure
-    //     returns (uint256 fixedStartIndex, uint256 fixedEndIndex)
-    // {
-    //     /// @dev flip values if the start index is greater than the end index
-    //     if (startIndex < endIndex) {
-    //         (startIndex, endIndex) = (endIndex, startIndex);
-    //     }
-    //     return (startIndex, endIndex);
-    // }
 
     /// CACHE
 
