@@ -46,34 +46,48 @@ struct OperatorState {
     OperatorExtraData extraData;
 }
 
-library OperatorsDataStorage {
-    // keccak256(abi.encode(uint256(keccak256("lido.cccp.OperatorsData")) - 1)) & ~bytes32(uint256(0xff))
-    bytes32 private constant OperatorsDataStorageLocation =
-        0x431bec91c9e23dd28793baaf52dfc0abbbc039dfe7dd0289d5cfb3a490da5600;
+struct ModuleState {
+    bool isActive;
+    // hopefully, we won't need more than 2^64 validators
+    uint64 maxValidators;
+}
 
-    struct OperatorsData {
-        mapping(address => OperatorState) _states;
+struct OptInOutConfig {
+    // minimum duration of the opt-in period in blocks
+    uint64 optInMinDurationBlocks;
+    // delay in blocks before the operator can opt-in again after opt-out
+    uint64 optOutDelayDurationBlocks;
+}
+
+library CCCPDataStorage {
+    struct CCCPData {
+        OptInOutConfig optInOut;
+        mapping(address => OperatorState) _operators;
         // operator's manager to reward address mapping, allow operators not use their reward address
         mapping(address => address) _managers;
+        mapping(uint256 => ModuleState) _modules;
     }
 
-    function _getOperatorsDataStorage() private pure returns (OperatorsData storage $) {
+    // keccak256(abi.encode(uint256(keccak256("lido.cccp.CCCPData")) - 1)) & ~bytes32(uint256(0xff))
+    bytes32 internal constant CCCP_DATA_LOCATION = 0x250c379b4df7db4aa0cebfe63c44e477918a4a35c66c19b68448ebd5517bd100;
+
+    function _getStorage() internal pure returns (CCCPData storage $) {
         assembly {
-            $.slot := OperatorsDataStorageLocation
+            $.slot := CCCP_DATA_LOCATION
         }
     }
 
     function _getOperatorStateStorage(address managerAddress) private view returns (OperatorState storage) {
-        return _getOperatorsDataStorage()._states[managerAddress];
+        return _getStorage()._operators[managerAddress];
     }
 
     /// @notice get operator' full state
     function _getOperatorState(address managerAddress) internal view returns (OperatorState memory) {
-        return _getOperatorsDataStorage()._states[managerAddress];
+        return _getStorage()._operators[managerAddress];
     }
 
     // function _setOperatorState(address managerAddress, OperatorState memory state) internal {
-    //     _getOperatorsDataStorage()._states[managerAddress] = operator;
+    //     _getStorage()._operators[managerAddress] = operator;
     // }
 
     /// @notice get operator's attributes
@@ -114,10 +128,41 @@ library OperatorsDataStorage {
 
     /// @notice get manager address linked to the operator's reward address
     function _getOperatorManager(address rewardAddress) internal view returns (address managerAddress) {
-        return _getOperatorsDataStorage()._managers[rewardAddress];
+        return _getStorage()._managers[rewardAddress];
     }
 
     function _setOperatorManager(address rewardAddress, address managerAddress) internal {
-        _getOperatorsDataStorage()._managers[rewardAddress] = managerAddress;
+        _getStorage()._managers[rewardAddress] = managerAddress;
     }
+
+    /// MODULES DATA
+
+    function _getModuleState(uint24 moduleId) internal view returns (ModuleState memory) {
+        return _getStorage()._modules[moduleId];
+    }
+
+    function _setModuleState(uint24 moduleId, ModuleState memory state) internal {
+        _getStorage()._modules[moduleId] = state;
+    }
+
+    /// CONFIG DATA
+
+    function _getConfigOptInOut() internal view returns (OptInOutConfig memory) {
+        return _getStorage().optInOut;
+    }
+
+    // function _getConfigOptInOutVars() internal view returns (uint64 optInMinDurationBlocks, uint64 optOutDelayDurationBlocks) {
+    //     OptInOutConfig memory optInOutCfg = _getConfigOptInOut();
+    //     return (optInOutCfg.optInMinDurationBlocks, optInOutCfg.optOutDelayDurationBlocks);
+    // }
+
+    function _setConfigOptInOut(OptInOutConfig memory config) internal {
+        _getStorage().optInOut = config;
+    }
+
+    // function _setConfigOptInOutVars(uint64 optInMinDurationBlocks, uint64 optOutDelayDurationBlocks) internal {
+    //     _setConfigOptInOut(
+    //         OptInOutConfig({optInMinDurationBlocks: optInMinDurationBlocks, optOutDelayDurationBlocks: optOutDelayDurationBlocks})
+    //     );
+    // }
 }

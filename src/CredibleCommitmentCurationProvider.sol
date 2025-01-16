@@ -10,15 +10,15 @@ import {PausableUpgradeable} from "@openzeppelin/contracts-upgradeable/utils/Pau
 import {UUPSUpgradeable} from "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 
 import {
-    OperatorsDataStorage as Operators,
+    CCCPDataStorage as DS,
     OperatorState,
     OperatorOptInOutState,
     OperatorAttributes,
     OperatorKeysRangeState,
-    OperatorExtraData
-} from "./lib/OperatorsDataStorage.sol";
-import {ConfigDataStorage as Config, OptInOutConfig} from "./lib/ConfigDataStorage.sol";
-import {ModulesDataStorage as Modules, ModuleState} from "./lib/ModulesDataStorage.sol";
+    OperatorExtraData,
+    ModuleState,
+    OptInOutConfig
+} from "./lib/CCCPDataStorage.sol";
 
 import {ILidoLocator} from "./interfaces/ILidoLocator.sol";
 import {StakingModule, IStakingRouter} from "./interfaces/IStakingRouter.sol";
@@ -32,14 +32,13 @@ contract CredibleCommitmentCurationProvider is
     PausableUpgradeable,
     UUPSUpgradeable
 {
-    bytes32 public constant COMMITTEE_ROLE = keccak256("COMMITTEE_ROLE");
-
     struct StakingModuleCache {
         bool _cached;
         uint24 id;
         StakingModuleStatus status;
         address moduleAddress;
         uint64 totalOperatorsCount;
+        bytes32 moduleType;
     }
 
     struct NodeOperatorCache {
@@ -64,14 +63,22 @@ contract CredibleCommitmentCurationProvider is
         bool optOutAllowed;
     }
 
-    event OptInSucceeded(
-        uint256 indexed moduleId,
-        uint256 indexed operatorId,
-        address managerAddress,
-        uint256 keysRangeStart,
-        uint256 keysRangeEnd,
-        string rpcURL
+    bytes32 public constant COMMITTEE_ROLE = keccak256("COMMITTEE_ROLE");
+    ILidoLocator public immutable LIDO_LOCATOR;
+    // hardcoded CSModule type, used for the operator's state retrieval
+    bytes32 internal immutable CS_MODULE_TYPE;
+    // Default max validators if not set explicitly
+    uint64 public immutable DEFAULT_MAX_VALIDATORS;
+
+    event OptInSucceeded(uint256 indexed moduleId, uint256 indexed operatorId, address managerAddress);
+    event OptOutRequested(uint256 indexed moduleId, uint256 indexed operatorId, bool isForced);
+    event KeyRangeUpdated(
+        uint256 indexed moduleId, uint256 indexed operatorId, uint256 keysRangeStart, uint256 keysRangeEnd
     );
+    event RPCUrlUpdated(uint256 indexed moduleId, uint256 indexed operatorId, string rpcURL);
+    event ModuleMaxValidatorsUpdated(uint256 indexed moduleId, uint256 maxValidators);
+    event ModuleIsActiveUpdated(uint256 indexed moduleId, bool isActive);
+    event OptInOutConfigUpdated(uint256 optInMinDurationBlocks, uint256 optOutDelayDurationBlocks);
 
     error OperatorNotRegistered();
     error ManagerAddressMismatch();
@@ -83,7 +90,6 @@ contract CredibleCommitmentCurationProvider is
     error OperatorOptOutNotAllowed();
     error KeyIndexOutOfRange();
     error KeyIndexMismatch();
-    error ModuleDisabled();
     error InvalidModuleMaxValidators();
     error InvalidModuleStatus();
     error InvalidOperatorId();
@@ -92,17 +98,22 @@ contract CredibleCommitmentCurationProvider is
     error ZeroOperatorManagerAddress();
     error ZeroLocatorAddress();
 
-    ILidoLocator public immutable LIDO_LOCATOR;
-    uint64 public constant DEFAULT_MAX_VALIDATORS = 1000; // Default max validators if not set explicitly
-
-    constructor(address lidoLocator) {
+    constructor(address lidoLocator, bytes32 csModuleType, uint64 defaultMaxValidators) {
         if (lidoLocator == address(0)) revert ZeroLocatorAddress();
         LIDO_LOCATOR = ILidoLocator(lidoLocator);
+
+        CS_MODULE_TYPE = csModuleType;
+        DEFAULT_MAX_VALIDATORS = defaultMaxValidators;
 
         _disableInitializers();
     }
 
-    function initialize(address committeeAddress, address adminAddress) external initializer {
+    function initialize(
+        address committeeAddress,
+        address adminAddress,
+        uint64 optInMinDurationBlocks,
+        uint64 optOutDelayDurationBlocks
+    ) external initializer {
         if (committeeAddress == address(0)) revert ZeroCommitteeAddress();
         if (adminAddress == address(0)) revert ZeroAdminAddress();
 
@@ -111,6 +122,8 @@ contract CredibleCommitmentCurationProvider is
 
         _grantRole(DEFAULT_ADMIN_ROLE, adminAddress);
         _grantRole(COMMITTEE_ROLE, committeeAddress);
+
+        _setConfigOptInOutDurations(optInMinDurationBlocks, optOutDelayDurationBlocks);
     }
 
     /// @notice Resume all operations after a pause
@@ -121,6 +134,46 @@ contract CredibleCommitmentCurationProvider is
     /// @notice Pause all operations
     function pause() external onlyRole(COMMITTEE_ROLE) {
         _pause();
+    }
+
+    function setModuleMaxValidators(uint24 moduleId, uint64 maxValidators) external onlyRole(COMMITTEE_ROLE) {
+        StateCache memory cache;
+        /// @dev check moduleId via staking router
+        _prepStakingModuleCache(cache, moduleId);
+
+        ///todo: upper cap for maxValidators?
+        // if (maxValidators > xxx) {
+        //     revert InvalidModuleMaxValidators();
+        // }
+
+        ModuleState memory state = DS._getModuleState(moduleId);
+        if (!state.isActive) {
+            revert ModuleNotActive();
+        }
+        state.maxValidators = maxValidators;
+        DS._setModuleState(moduleId, state);
+
+        emit ModuleMaxValidatorsUpdated(moduleId, maxValidators);
+    }
+
+    function setModuleIsActive(uint24 moduleId, bool isActive) external onlyRole(COMMITTEE_ROLE) {
+        StateCache memory cache;
+        /// @dev check moduleId via staking router
+        _prepStakingModuleCache(cache, moduleId);
+
+        ModuleState memory state = DS._getModuleState(moduleId);
+        state.isActive = isActive;
+        DS._setModuleState(moduleId, state);
+
+        emit ModuleIsActiveUpdated(moduleId, isActive);
+    }
+
+    /// @notice update min opt-in and opt-out delay durations
+    function setConfigOptInOutDurations(uint64 optInMinDurationBlocks, uint64 optOutDelayDurationBlocks)
+        external
+        onlyRole(COMMITTEE_ROLE)
+    {
+        _setConfigOptInOutDurations(optInMinDurationBlocks, optOutDelayDurationBlocks);
     }
 
     /// @notice Opt-in operator to the module
@@ -153,13 +206,13 @@ contract CredibleCommitmentCurationProvider is
             revert OperatorNotActive();
         }
 
-        address linkedManagerAddress = Operators._getOperatorManager(rewardAddress);
+        address linkedManagerAddress = DS._getOperatorManager(rewardAddress);
         /// @dev allow repeated opt-in after opt-out delay
         if (linkedManagerAddress != address(0) && linkedManagerAddress != managerAddress) {
             revert ManagerAddressMismatch();
         }
 
-        OperatorOptInOutState memory optInOutState = Operators._getOperatorOptInOutState(linkedManagerAddress);
+        OperatorOptInOutState memory optInOutState = DS._getOperatorOptInOutState(linkedManagerAddress);
         OperatorOptInOutFlags memory flags = _calcOpyInOutFlags(optInOutState);
         if (flags.isOptedIn) {
             revert OperatorAlreadyRegistered();
@@ -172,21 +225,21 @@ contract CredibleCommitmentCurationProvider is
         _checkModuleParams(moduleId, newKeyIndexRangeStart, newKeyIndexRangeEnd);
 
         // save operator state
-        Operators._setOperatorManager(rewardAddress, managerAddress);
-        Operators._setOperatorAttributes(
-            managerAddress, OperatorAttributes({moduleId: moduleId, operatorId: operatorId})
-        );
-        Operators._setOperatorOptInOutState(
+        DS._setOperatorManager(rewardAddress, managerAddress);
+        DS._setOperatorAttributes(managerAddress, OperatorAttributes({moduleId: moduleId, operatorId: operatorId}));
+        DS._setOperatorOptInOutState(
             managerAddress,
             OperatorOptInOutState({optInBlock: uint64(block.number), optOutBlock: 0, isOptOutForced: false})
         );
-        Operators._setOperatorKeysRangeState(
+        DS._setOperatorKeysRangeState(
             managerAddress, OperatorKeysRangeState({indexStart: newKeyIndexRangeStart, indexEnd: newKeyIndexRangeEnd})
         );
         /// @dev no checks on rpcUrl, so it can be rewritten on repeated opt-in
-        Operators._setOperatorExtraData(managerAddress, OperatorExtraData({rpcURL: rpcURL}));
+        DS._setOperatorExtraData(managerAddress, OperatorExtraData({rpcURL: rpcURL}));
 
-        emit OptInSucceeded(moduleId, operatorId, managerAddress, newKeyIndexRangeStart, newKeyIndexRangeEnd, rpcURL);
+        emit OptInSucceeded(moduleId, operatorId, managerAddress);
+        emit KeyRangeUpdated(moduleId, operatorId, newKeyIndexRangeStart, newKeyIndexRangeEnd);
+        emit RPCUrlUpdated(moduleId, operatorId, rpcURL);
     }
 
     /// @notice Opt-out operator on behalf of the operator manager
@@ -197,7 +250,7 @@ contract CredibleCommitmentCurationProvider is
         StateCache memory cache;
         _checkOperatorByManagerAddress(cache, managerAddress);
 
-        OperatorOptInOutState memory optInOutState = Operators._getOperatorOptInOutState(managerAddress);
+        OperatorOptInOutState memory optInOutState = DS._getOperatorOptInOutState(managerAddress);
         OperatorOptInOutFlags memory flags = _calcOpyInOutFlags(optInOutState);
         if (!flags.isOptedIn) {
             revert OperatorNotActive();
@@ -207,9 +260,9 @@ contract CredibleCommitmentCurationProvider is
 
         optInOutState.optOutBlock = uint64(block.number);
 
-        Operators._setOperatorOptInOutState(managerAddress, optInOutState);
+        DS._setOperatorOptInOutState(managerAddress, optInOutState);
 
-        ///todoemit event
+        emit OptOutRequested(cache.noCache.moduleId, cache.noCache.id, false);
     }
 
     /// @notice Opt-out operator on behalf of the committee
@@ -218,7 +271,7 @@ contract CredibleCommitmentCurationProvider is
         /// @dev correctness of moduleId and operatorId are checked inside
         _prepStateCache(cache, moduleId, operatorId);
         address rewardAddress = cache.noCache.rewardAddress;
-        address linkedManagerAddress = Operators._getOperatorManager(rewardAddress);
+        address linkedManagerAddress = DS._getOperatorManager(rewardAddress);
         // if (linkedManagerAddress != managerAddress) {
         //     revert ManagerAddressMismatch();
         // }
@@ -226,7 +279,7 @@ contract CredibleCommitmentCurationProvider is
             revert OperatorNotRegistered();
         }
 
-        OperatorOptInOutState memory optInOutState = Operators._getOperatorOptInOutState(linkedManagerAddress);
+        OperatorOptInOutState memory optInOutState = DS._getOperatorOptInOutState(linkedManagerAddress);
         OperatorOptInOutFlags memory flags = _calcOpyInOutFlags(optInOutState);
         if (!flags.isOptedIn) {
             revert OperatorNotActive();
@@ -236,15 +289,15 @@ contract CredibleCommitmentCurationProvider is
         optInOutState.optOutBlock = uint64(block.number);
         optInOutState.isOptOutForced = true;
 
-        Operators._setOperatorOptInOutState(linkedManagerAddress, optInOutState);
+        DS._setOperatorOptInOutState(linkedManagerAddress, optInOutState);
 
-        ///todoemit event
+        emit OptOutRequested(cache.noCache.moduleId, cache.noCache.id, true);
     }
 
     function updateKeysRange(uint64 newKeyIndexRangeStart, uint64 newKeyIndexRangeEnd) external whenNotPaused {
         address managerAddress = msg.sender;
 
-        OperatorAttributes memory attr = Operators._getOperatorAttributes(managerAddress);
+        OperatorAttributes memory attr = DS._getOperatorAttributes(managerAddress);
         if (attr.moduleId == 0) {
             revert OperatorNotRegistered();
         }
@@ -253,17 +306,17 @@ contract CredibleCommitmentCurationProvider is
         /// @dev correctness of moduleId and operatorId are checked inside
         _prepStateCache(cache, attr.moduleId, attr.operatorId);
         address rewardAddress = cache.noCache.rewardAddress;
-        address linkedManagerAddress = Operators._getOperatorManager(rewardAddress);
+        address linkedManagerAddress = DS._getOperatorManager(rewardAddress);
         if (linkedManagerAddress != managerAddress) {
             revert ManagerAddressMismatch();
         }
 
-        OperatorOptInOutFlags memory flags = _calcOpyInOutFlags(Operators._getOperatorOptInOutState(managerAddress));
+        OperatorOptInOutFlags memory flags = _calcOpyInOutFlags(DS._getOperatorOptInOutState(managerAddress));
         if (!flags.isOptedIn) {
             revert OperatorNotActive();
         }
 
-        OperatorKeysRangeState memory keysRangeState = Operators._getOperatorKeysRangeState(managerAddress);
+        OperatorKeysRangeState memory keysRangeState = DS._getOperatorKeysRangeState(managerAddress);
         if (
             newKeyIndexRangeStart > keysRangeState.indexStart || newKeyIndexRangeEnd < keysRangeState.indexEnd
                 || (newKeyIndexRangeStart == keysRangeState.indexStart && newKeyIndexRangeEnd == keysRangeState.indexEnd)
@@ -276,11 +329,11 @@ contract CredibleCommitmentCurationProvider is
         _checkModuleParams(cache.noCache.moduleId, newKeyIndexRangeStart, newKeyIndexRangeEnd);
 
         // save operator state
-        Operators._setOperatorKeysRangeState(
+        DS._setOperatorKeysRangeState(
             managerAddress, OperatorKeysRangeState({indexStart: newKeyIndexRangeStart, indexEnd: newKeyIndexRangeEnd})
         );
 
-        ///todoemit event
+        emit KeyRangeUpdated(cache.noCache.moduleId, cache.noCache.id, newKeyIndexRangeStart, newKeyIndexRangeEnd);
     }
 
     function getOperatorByManagerAddress(address managerAddress)
@@ -297,7 +350,7 @@ contract CredibleCommitmentCurationProvider is
 
         _checkOperatorByManagerAddress(cache, managerAddress);
         linkedManagerAddress = managerAddress;
-        state = Operators._getOperatorState(managerAddress);
+        state = DS._getOperatorState(managerAddress);
         operatorRewardAddress = cache.noCache.rewardAddress;
         flags = _calcOpyInOutFlags(state.optInOutState);
     }
@@ -315,12 +368,12 @@ contract CredibleCommitmentCurationProvider is
         StateCache memory cache;
 
         /// @dev first check if the manager exists for the current operator's reward address
-        linkedManagerAddress = Operators._getOperatorManager(rewardAddress);
+        linkedManagerAddress = DS._getOperatorManager(rewardAddress);
         if (linkedManagerAddress == address(0)) {
             revert OperatorNotRegistered();
         }
 
-        state = Operators._getOperatorState(linkedManagerAddress);
+        state = DS._getOperatorState(linkedManagerAddress);
 
         // if (state.attr.moduleId == 0) {
         //     revert OperatorNotRegistered();
@@ -353,12 +406,12 @@ contract CredibleCommitmentCurationProvider is
         operatorRewardAddress = cache.noCache.rewardAddress;
 
         /// @dev first check if the manager exists for the current operator's reward address
-        linkedManagerAddress = Operators._getOperatorManager(operatorRewardAddress);
+        linkedManagerAddress = DS._getOperatorManager(operatorRewardAddress);
         if (linkedManagerAddress == address(0)) {
             revert OperatorNotRegistered();
         }
 
-        state = Operators._getOperatorState(linkedManagerAddress);
+        state = DS._getOperatorState(linkedManagerAddress);
         /// @dev check case when the operator's manager and reward addresses were used in different module
         if (state.attr.moduleId != moduleId || state.attr.operatorId != operatorId) {
             revert OperatorNotRegistered();
@@ -366,8 +419,34 @@ contract CredibleCommitmentCurationProvider is
         flags = _calcOpyInOutFlags(state.optInOutState);
     }
 
+    /// @notice update max validators for the module
+    /// @dev zero value means disable all future opt-ins
+    function _setConfigOptInOutDurations(uint64 optInMinDurationBlocks, uint64 optOutDelayDurationBlocks) internal {
+        DS._setConfigOptInOut(
+            OptInOutConfig({
+                optInMinDurationBlocks: optInMinDurationBlocks,
+                optOutDelayDurationBlocks: optOutDelayDurationBlocks
+            })
+        );
+
+        emit OptInOutConfigUpdated(optInMinDurationBlocks, optOutDelayDurationBlocks);
+    }
+
+    function _checkModuleParams(uint24 moduleId, uint64 startIndex, uint64 endIndex) internal view {
+        ModuleState memory state = DS._getModuleState(moduleId);
+        if (!state.isActive) {
+            revert ModuleNotActive();
+        }
+        uint64 totalKeys = endIndex - startIndex + 1;
+        uint64 maxValidators = state.maxValidators == 0 ? DEFAULT_MAX_VALIDATORS : state.maxValidators;
+
+        if (totalKeys > maxValidators) {
+            revert InvalidModuleMaxValidators();
+        }
+    }
+
     function _checkOperatorByManagerAddress(StateCache memory cache, address managerAddress) internal view {
-        OperatorAttributes memory attr = Operators._getOperatorAttributes(managerAddress);
+        OperatorAttributes memory attr = DS._getOperatorAttributes(managerAddress);
         if (attr.moduleId == 0) {
             revert OperatorNotRegistered();
         }
@@ -375,66 +454,9 @@ contract CredibleCommitmentCurationProvider is
         /// @dev correctness of moduleId and operatorId are checked inside
         _prepStateCache(cache, attr.moduleId, attr.operatorId);
         address rewardAddress = cache.noCache.rewardAddress;
-        address linkedManagerAddress = Operators._getOperatorManager(rewardAddress);
+        address linkedManagerAddress = DS._getOperatorManager(rewardAddress);
         if (linkedManagerAddress != managerAddress) {
             revert ManagerAddressMismatch();
-        }
-    }
-
-    /// @notice update max validators for the module
-    /// @dev zero value means disable all future opt-ins
-    function setMaxValidatorsForStakingModule(uint24 moduleId, uint64 maxValidators)
-        external
-        onlyRole(COMMITTEE_ROLE)
-    {
-        StateCache memory cache;
-        /// @dev check moduleId via staking router
-        _prepStakingModuleCache(cache, moduleId);
-
-        ///todo: upper cap for maxValidators?
-        // if (maxValidators > xxx) {
-        //     revert InvalidModuleMaxValidators();
-        // }
-
-        ModuleState memory state = Modules._getModuleState(moduleId);
-        if (!state.isActive) {
-            revert ModuleNotActive();
-        }
-        state.maxValidators = maxValidators;
-        Modules._setModuleState(moduleId, state);
-
-        ///todo emit event
-    }
-
-    /// @notice update min opt-in and opt-out delay durations
-    function setConfigOptInOutDurations(uint64 optInMinDurationBlocks, uint64 optOutDelayDurationBlocks)
-        external
-        onlyRole(COMMITTEE_ROLE)
-    {
-        _setConfigOptInOutDurations(optInMinDurationBlocks, optOutDelayDurationBlocks);
-    }
-
-    function _setConfigOptInOutDurations(uint64 optInMinDurationBlocks, uint64 optOutDelayDurationBlocks) internal {
-        Config._setConfigOptInOut(
-            OptInOutConfig({
-                optInMinDurationBlocks: optInMinDurationBlocks,
-                optOutDelayDurationBlocks: optOutDelayDurationBlocks
-            })
-        );
-
-        ///todo emit event
-    }
-
-    function _checkModuleParams(uint24 moduleId, uint64 startIndex, uint64 endIndex) internal view {
-        ModuleState memory state = Modules._getModuleState(moduleId);
-        if (!state.isActive) {
-            revert ModuleDisabled();
-        }
-        uint64 totalKeys = endIndex - startIndex + 1;
-        uint64 maxValidators = state.maxValidators == 0 ? DEFAULT_MAX_VALIDATORS : state.maxValidators;
-
-        if (totalKeys > maxValidators) {
-            revert InvalidModuleMaxValidators();
         }
     }
 
@@ -454,7 +476,7 @@ contract CredibleCommitmentCurationProvider is
         returns (OperatorOptInOutFlags memory flags)
     {
         uint64 blockNumber = uint64(block.number);
-        OptInOutConfig memory optInOutCfg = Config._getConfigOptInOut();
+        OptInOutConfig memory optInOutCfg = DS._getConfigOptInOut();
 
         bool isOptedOut = optInOutState.optOutBlock > 0
             && optInOutState.optOutBlock + optInOutCfg.optOutDelayDurationBlocks < blockNumber;
@@ -507,7 +529,8 @@ contract CredibleCommitmentCurationProvider is
             id: moduleId,
             status: StakingModuleStatus(module.status),
             moduleAddress: module.stakingModuleAddress,
-            totalOperatorsCount: uint64(IStakingModule(module.stakingModuleAddress).getNodeOperatorsCount())
+            totalOperatorsCount: uint64(IStakingModule(module.stakingModuleAddress).getNodeOperatorsCount()),
+            moduleType: IStakingModule(module.stakingModuleAddress).getType()
         });
     }
 
@@ -528,8 +551,8 @@ contract CredibleCommitmentCurationProvider is
         bool isActive;
         address rewardAddress;
         uint64 totalKeys;
-        /// @dev hardcoded check for the CSModule id
-        if (cache.noCache.id == 4) {
+        /// @dev check for the CSModule type
+        if (cache.modCache.moduleType == CS_MODULE_TYPE) {
             ICSModule module = ICSModule(cache.modCache.moduleAddress);
             isActive = module.getNodeOperatorIsActive(operatorId);
             CSMNodeOperator memory operator = module.getNodeOperator(operatorId);
@@ -554,5 +577,7 @@ contract CredibleCommitmentCurationProvider is
 
     /// @notice UUPS proxy upgrade authorization
     /// @dev Only the default admin role can authorize an upgrade
-    function _authorizeUpgrade(address) internal override onlyRole(DEFAULT_ADMIN_ROLE) {}
+    function _authorizeUpgrade(address) internal view override {
+        _checkRole(DEFAULT_ADMIN_ROLE);
+    }
 }
