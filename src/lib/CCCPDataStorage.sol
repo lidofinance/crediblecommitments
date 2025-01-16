@@ -63,7 +63,7 @@ library CCCPDataStorage {
     struct CCCPData {
         OptInOutConfig optInOut;
         mapping(address => OperatorState) _operators;
-        // operator's manager to reward address mapping, allow operators not use their reward address
+        // operator's reward to manager address mapping, allow operators not use their reward address
         mapping(address => address) _managers;
         mapping(uint256 => ModuleState) _modules;
     }

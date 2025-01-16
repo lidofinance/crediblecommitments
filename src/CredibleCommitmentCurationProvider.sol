@@ -208,7 +208,7 @@ contract CredibleCommitmentCurationProvider is
         }
 
         OperatorOptInOutState memory optInOutState = DS._getOperatorOptInOutState(linkedManagerAddress);
-        OperatorOptInOutFlags memory flags = _calcOpyInOutFlags(optInOutState);
+        OperatorOptInOutFlags memory flags = _calcOptInOutFlags(optInOutState);
         if (flags.isOptedIn) {
             revert OperatorAlreadyRegistered();
         } else if (!flags.optInAllowed) {
@@ -234,7 +234,7 @@ contract CredibleCommitmentCurationProvider is
 
         emit OptInSucceeded(moduleId, operatorId, managerAddress);
         emit KeyRangeUpdated(moduleId, operatorId, newKeyIndexRangeStart, newKeyIndexRangeEnd);
-        emit RPCUrlUpdated(moduleId, operatorId, rpcURL);
+        // emit RPCUrlUpdated(moduleId, operatorId, rpcURL);
     }
 
     /// @notice Opt-out operator on behalf of the operator manager
@@ -246,7 +246,7 @@ contract CredibleCommitmentCurationProvider is
         _checkOperatorByManagerAddress(cache, managerAddress);
 
         OperatorOptInOutState memory optInOutState = DS._getOperatorOptInOutState(managerAddress);
-        OperatorOptInOutFlags memory flags = _calcOpyInOutFlags(optInOutState);
+        OperatorOptInOutFlags memory flags = _calcOptInOutFlags(optInOutState);
         if (!flags.isOptedIn) {
             revert OperatorNotActive();
         } else if (!flags.optOutAllowed) {
@@ -275,7 +275,7 @@ contract CredibleCommitmentCurationProvider is
         }
 
         OperatorOptInOutState memory optInOutState = DS._getOperatorOptInOutState(linkedManagerAddress);
-        OperatorOptInOutFlags memory flags = _calcOpyInOutFlags(optInOutState);
+        OperatorOptInOutFlags memory flags = _calcOptInOutFlags(optInOutState);
         if (!flags.isOptedIn) {
             revert OperatorNotActive();
         }
@@ -306,7 +306,7 @@ contract CredibleCommitmentCurationProvider is
             revert ManagerAddressMismatch();
         }
 
-        OperatorOptInOutFlags memory flags = _calcOpyInOutFlags(DS._getOperatorOptInOutState(managerAddress));
+        OperatorOptInOutFlags memory flags = _calcOptInOutFlags(DS._getOperatorOptInOutState(managerAddress));
         if (!flags.isOptedIn) {
             revert OperatorNotActive();
         }
@@ -347,7 +347,7 @@ contract CredibleCommitmentCurationProvider is
         linkedManagerAddress = managerAddress;
         state = DS._getOperatorState(managerAddress);
         operatorRewardAddress = cache.noCache.rewardAddress;
-        flags = _calcOpyInOutFlags(state.optInOutState);
+        flags = _calcOptInOutFlags(state.optInOutState);
     }
 
     function getOperatorByRewardAddress(address rewardAddress)
@@ -381,7 +381,7 @@ contract CredibleCommitmentCurationProvider is
         if (operatorRewardAddress != rewardAddress) {
             revert RewardAddressMismatch();
         }
-        flags = _calcOpyInOutFlags(state.optInOutState);
+        flags = _calcOptInOutFlags(state.optInOutState);
     }
 
     function getOperatorByAttr(uint24 moduleId, uint64 operatorId)
@@ -411,7 +411,7 @@ contract CredibleCommitmentCurationProvider is
         if (state.attr.moduleId != moduleId || state.attr.operatorId != operatorId) {
             revert OperatorNotRegistered();
         }
-        flags = _calcOpyInOutFlags(state.optInOutState);
+        flags = _calcOptInOutFlags(state.optInOutState);
     }
 
     /// @notice update max validators for the module
@@ -428,6 +428,7 @@ contract CredibleCommitmentCurationProvider is
     }
 
     function _checkModuleParams(uint24 moduleId, uint64 startIndex, uint64 endIndex) internal view {
+        ///todo check max validators sum per module
         ModuleState memory state = DS._getModuleState(moduleId);
         if (!state.isActive) {
             revert ModuleNotActive();
@@ -465,7 +466,7 @@ contract CredibleCommitmentCurationProvider is
         }
     }
 
-    function _calcOpyInOutFlags(OperatorOptInOutState memory optInOutState)
+    function _calcOptInOutFlags(OperatorOptInOutState memory optInOutState)
         internal
         view
         returns (OperatorOptInOutFlags memory flags)
