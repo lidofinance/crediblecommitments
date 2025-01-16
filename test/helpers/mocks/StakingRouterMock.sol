@@ -3,7 +3,7 @@
 
 pragma solidity 0.8.28;
 
-import {IStakingRouter, StakingModule} from "../../src/interfaces/IStakingRouter.sol";
+import {IStakingRouter, StakingModule} from "../../../src/interfaces/IStakingRouter.sol";
 
 contract StakingRouterMock is IStakingRouter {
     struct SM {

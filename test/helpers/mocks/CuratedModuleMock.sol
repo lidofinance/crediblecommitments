@@ -3,7 +3,7 @@
 
 pragma solidity 0.8.28;
 
-import {ICuratedModule} from "../../src/interfaces/ICuratedModule.sol";
+import {ICuratedModule} from "../../../src/interfaces/ICuratedModule.sol";
 import {StakingModuleMock} from "./StakingModuleMock.sol";
 
 contract CuratedModuleMock is StakingModuleMock, ICuratedModule {

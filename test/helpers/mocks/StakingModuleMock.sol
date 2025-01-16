@@ -3,7 +3,7 @@
 
 pragma solidity 0.8.28;
 
-import {IStakingModule} from "../../src/interfaces/IStakingModule.sol";
+import {IStakingModule} from "../../../src/interfaces/IStakingModule.sol";
 
 abstract contract StakingModuleMock is IStakingModule {
     struct NO {

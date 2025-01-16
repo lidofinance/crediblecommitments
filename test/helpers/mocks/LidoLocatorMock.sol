@@ -3,7 +3,7 @@
 
 pragma solidity 0.8.28;
 
-import {ILidoLocator} from "../../src/interfaces/ILidoLocator.sol";
+import {ILidoLocator} from "../../../src/interfaces/ILidoLocator.sol";
 
 contract LidoLocatorMock is ILidoLocator {
     address public sr;

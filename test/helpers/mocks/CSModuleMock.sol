@@ -3,7 +3,7 @@
 
 pragma solidity 0.8.28;
 
-import {ICSModule, CSMNodeOperator} from "../../src/interfaces/ICSModule.sol";
+import {ICSModule, CSMNodeOperator} from "../../../src/interfaces/ICSModule.sol";
 import {StakingModuleMock} from "./StakingModuleMock.sol";
 
 contract CSModuleMock is StakingModuleMock, ICSModule {
