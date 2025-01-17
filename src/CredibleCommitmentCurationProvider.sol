@@ -16,7 +16,7 @@ import {
     OperatorKeysRangeState,
     OperatorExtraData,
     ModuleState,
-    OptInOutConfig
+    Config
 } from "./lib/CCCPDataStorage.sol";
 
 import {ILidoLocator} from "./interfaces/ILidoLocator.sol";
@@ -30,28 +30,14 @@ contract CredibleCommitmentCurationProvider is
     AccessControlEnumerableUpgradeable,
     PausableUpgradeable
 {
-    struct StakingModuleCache {
-        bool _cached;
-        uint24 id;
-        StakingModuleStatus status;
-        address moduleAddress;
-        uint64 totalOperatorsCount;
-        bytes32 moduleType;
-    }
-
-    struct NodeOperatorCache {
-        bool _cached;
-        uint64 id;
+    struct LidoOperatorCache {
         uint24 moduleId;
-        bool isActive;
+        address moduleAddress;
+        StakingModuleStatus moduleStatus;
+        uint64 operatorId;
         address rewardAddress;
         uint64 totalKeys;
-    }
-
-    struct StateCache {
-        // bool _cached;
-        StakingModuleCache modCache;
-        NodeOperatorCache noCache;
+        bool isActive;
     }
 
     struct OperatorOptInOutFlags {
@@ -75,14 +61,15 @@ contract CredibleCommitmentCurationProvider is
     );
     event RPCUrlUpdated(uint256 indexed moduleId, uint256 indexed operatorId, string rpcURL);
     event ModuleMaxValidatorsUpdated(uint256 indexed moduleId, uint256 maxValidators);
-    event ModuleIsActiveUpdated(uint256 indexed moduleId, bool isActive);
+    event ModuleDisabledUpdated(uint256 indexed moduleId, bool isDisabled);
     event OptInOutConfigUpdated(uint256 optInMinDurationBlocks, uint256 optOutDelayDurationBlocks);
 
     error OperatorNotRegistered();
     error ManagerAddressMismatch();
     error RewardAddressMismatch();
     error OperatorNotActive();
-    error ModuleNotActive();
+    error ModuleDisabled();
+    error SameValue();
     error OperatorAlreadyRegistered();
     error OperatorOptInNotAllowed();
     error OperatorOptOutNotAllowed();
@@ -91,6 +78,7 @@ contract CredibleCommitmentCurationProvider is
     error InvalidModuleMaxValidators();
     error InvalidModuleStatus();
     error InvalidOperatorId();
+    error InvalidModuleId();
     error ZeroCommitteeAddress();
     error ZeroOperatorManagerAddress();
     error ZeroLocatorAddress();
@@ -105,11 +93,10 @@ contract CredibleCommitmentCurationProvider is
         _disableInitializers();
     }
 
-    function initialize(
-        address committeeAddress,
-        uint64 optInMinDurationBlocks,
-        uint64 optOutDelayDurationBlocks
-    ) external initializer {
+    function initialize(address committeeAddress, uint64 optInMinDurationBlocks, uint64 optOutDelayDurationBlocks, uint64 defaultModuleMaxValidators, uint64 defaultBlockGasLimit)
+        external
+        initializer
+    {
         if (committeeAddress == address(0)) revert ZeroCommitteeAddress();
 
         __Pausable_init();
@@ -119,6 +106,14 @@ contract CredibleCommitmentCurationProvider is
         _grantRole(COMMITTEE_ROLE, committeeAddress);
 
         _setConfigOptInOutDurations(optInMinDurationBlocks, optOutDelayDurationBlocks);
+        DS._setConfigOptInOut(
+            Config({
+                optInMinDurationBlocks: optInMinDurationBlocks,
+                optOutDelayDurationBlocks: optOutDelayDurationBlocks
+            })
+        );
+
+        emit OptInOutConfigUpdated(optInMinDurationBlocks, optOutDelayDurationBlocks);
     }
 
     /// @notice Resume all operations after a pause
@@ -131,10 +126,11 @@ contract CredibleCommitmentCurationProvider is
         _pause();
     }
 
+    /// @notice Update the max validators for the module
     function setModuleMaxValidators(uint24 moduleId, uint64 maxValidators) external onlyRole(COMMITTEE_ROLE) {
-        StateCache memory cache;
         /// @dev check moduleId via staking router
-        _prepStakingModuleCache(cache, moduleId);
+        LidoOperatorCache memory cache;
+        _loadLidoModuleData(cache, moduleId);
 
         ///todo: upper cap for maxValidators?
         // if (maxValidators > xxx) {
@@ -142,25 +138,24 @@ contract CredibleCommitmentCurationProvider is
         // }
 
         ModuleState memory state = DS._getModuleState(moduleId);
-        if (!state.isActive) {
-            revert ModuleNotActive();
-        }
         state.maxValidators = maxValidators;
         DS._setModuleState(moduleId, state);
 
         emit ModuleMaxValidatorsUpdated(moduleId, maxValidators);
     }
 
-    function setModuleIsActive(uint24 moduleId, bool isActive) external onlyRole(COMMITTEE_ROLE) {
-        StateCache memory cache;
+    /// @notice Disable/enable the module
+    /// @dev operators in disabled modules are automatically considered as opted-out
+    function setModuleDisabled(uint24 moduleId, bool isDisabled) external onlyRole(COMMITTEE_ROLE) {
         /// @dev check moduleId via staking router
-        _prepStakingModuleCache(cache, moduleId);
+        LidoOperatorCache memory cache;
+        _loadLidoModuleData(cache, moduleId);
 
         ModuleState memory state = DS._getModuleState(moduleId);
-        state.isActive = isActive;
+        state.isDisabled = isDisabled;
         DS._setModuleState(moduleId, state);
 
-        emit ModuleIsActiveUpdated(moduleId, isActive);
+        emit ModuleDisabledUpdated(moduleId, isDisabled);
     }
 
     /// @notice update min opt-in and opt-out delay durations
@@ -184,19 +179,19 @@ contract CredibleCommitmentCurationProvider is
         uint64 newKeyIndexRangeEnd,
         string memory rpcURL
     ) external whenNotPaused {
-        StateCache memory cache;
+        LidoOperatorCache memory cache;
 
         if (managerAddress == address(0)) revert ZeroOperatorManagerAddress();
 
         /// @dev correctness of moduleId and operatorId are checked inside
-        _prepStateCache(cache, moduleId, operatorId);
+        _loadLidoNodeOperator(cache, moduleId, operatorId);
         address rewardAddress = cache.noCache.rewardAddress;
 
         if (msg.sender != rewardAddress) {
             revert RewardAddressMismatch();
         }
 
-        // check if the operator is active in module
+        // check if the operator is active in Lido module
         if (!cache.noCache.isActive) {
             revert OperatorNotActive();
         }
@@ -241,7 +236,7 @@ contract CredibleCommitmentCurationProvider is
     function optOut() external whenNotPaused {
         address managerAddress = msg.sender;
 
-        StateCache memory cache;
+        LidoOperatorCache memory cache;
         _checkOperatorByManagerAddress(cache, managerAddress);
 
         OperatorOptInOutState memory optInOutState = DS._getOperatorOptInOutState(managerAddress);
@@ -261,9 +256,9 @@ contract CredibleCommitmentCurationProvider is
 
     /// @notice Opt-out operator on behalf of the committee
     function optOut(uint24 moduleId, uint64 operatorId) external onlyRole(COMMITTEE_ROLE) {
-        StateCache memory cache;
+        LidoOperatorCache memory cache;
         /// @dev correctness of moduleId and operatorId are checked inside
-        _prepStateCache(cache, moduleId, operatorId);
+        _loadLidoNodeOperator(cache, moduleId, operatorId);
         address rewardAddress = cache.noCache.rewardAddress;
         address linkedManagerAddress = DS._getOperatorManager(rewardAddress);
         if (linkedManagerAddress == address(0)) {
@@ -288,7 +283,7 @@ contract CredibleCommitmentCurationProvider is
     function updateKeysRange(uint64 newKeyIndexRangeStart, uint64 newKeyIndexRangeEnd) external whenNotPaused {
         address managerAddress = msg.sender;
 
-        StateCache memory cache;
+        LidoOperatorCache memory cache;
         _checkOperatorByManagerAddress(cache, managerAddress);
 
         OperatorOptInOutFlags memory flags = _calcOptInOutFlags(DS._getOperatorOptInOutState(managerAddress));
@@ -325,7 +320,7 @@ contract CredibleCommitmentCurationProvider is
             address linkedManagerAddress
         )
     {
-        StateCache memory cache;
+        LidoOperatorCache memory cache;
 
         _checkOperatorByManagerAddress(cache, managerAddress);
         linkedManagerAddress = managerAddress;
@@ -344,7 +339,7 @@ contract CredibleCommitmentCurationProvider is
             address linkedManagerAddress
         )
     {
-        StateCache memory cache;
+        LidoOperatorCache memory cache;
 
         /// @dev first check if the manager exists for the current operator's reward address
         linkedManagerAddress = DS._getOperatorManager(rewardAddress);
@@ -359,7 +354,7 @@ contract CredibleCommitmentCurationProvider is
         // }
 
         /// @dev correctness of moduleId and operatorId are checked inside
-        _prepStateCache(cache, state.attr.moduleId, state.attr.operatorId);
+        _loadLidoNodeOperator(cache, state.attr.moduleId, state.attr.operatorId);
         operatorRewardAddress = cache.noCache.rewardAddress;
         /// @dev check if actual reward address is the same as the one in the operator's state
         if (operatorRewardAddress != rewardAddress) {
@@ -378,10 +373,10 @@ contract CredibleCommitmentCurationProvider is
             address linkedManagerAddress
         )
     {
-        StateCache memory cache;
+        LidoOperatorCache memory cache;
 
         /// @dev correctness of moduleId and operatorId are checked inside
-        _prepStateCache(cache, moduleId, operatorId);
+        _loadLidoNodeOperator(cache, moduleId, operatorId);
         operatorRewardAddress = cache.noCache.rewardAddress;
 
         /// @dev first check if the manager exists for the current operator's reward address
@@ -402,7 +397,7 @@ contract CredibleCommitmentCurationProvider is
     /// @dev zero value means disable all future opt-ins
     function _setConfigOptInOutDurations(uint64 optInMinDurationBlocks, uint64 optOutDelayDurationBlocks) internal {
         DS._setConfigOptInOut(
-            OptInOutConfig({
+            Config({
                 optInMinDurationBlocks: optInMinDurationBlocks,
                 optOutDelayDurationBlocks: optOutDelayDurationBlocks
             })
@@ -415,7 +410,7 @@ contract CredibleCommitmentCurationProvider is
         ///todo check max validators sum per module
         ModuleState memory state = DS._getModuleState(moduleId);
         if (!state.isActive) {
-            revert ModuleNotActive();
+            revert ModuleDisabled();
         }
         uint64 totalKeys = endIndex - startIndex + 1;
         uint64 maxValidators = state.maxValidators == 0 ? DEFAULT_MAX_VALIDATORS : state.maxValidators;
@@ -425,14 +420,14 @@ contract CredibleCommitmentCurationProvider is
         }
     }
 
-    function _checkOperatorByManagerAddress(StateCache memory cache, address managerAddress) internal view {
+    function _checkOperatorByManagerAddress(LidoOperatorCache memory cache, address managerAddress) internal view {
         OperatorAttributes memory attr = DS._getOperatorAttributes(managerAddress);
         if (attr.moduleId == 0) {
             revert OperatorNotRegistered();
         }
 
         /// @dev correctness of moduleId and operatorId are checked inside
-        _prepStateCache(cache, attr.moduleId, attr.operatorId);
+        _loadLidoNodeOperator(cache, attr.moduleId, attr.operatorId);
         address rewardAddress = cache.noCache.rewardAddress;
         address linkedManagerAddress = DS._getOperatorManager(rewardAddress);
         if (linkedManagerAddress != managerAddress) {
@@ -456,7 +451,7 @@ contract CredibleCommitmentCurationProvider is
         returns (OperatorOptInOutFlags memory flags)
     {
         uint64 blockNumber = uint64(block.number);
-        OptInOutConfig memory optInOutCfg = DS._getConfigOptInOut();
+        Config memory optInOutCfg = DS._getConfigOptInOut();
 
         bool isOptedOut = optInOutState.optOutBlock > 0
             && optInOutState.optOutBlock + optInOutCfg.optOutDelayDurationBlocks < blockNumber;
@@ -480,64 +475,49 @@ contract CredibleCommitmentCurationProvider is
     }
 
     /// @notice Prepare the cache for the staking module and node operator
-    function _prepStateCache(StateCache memory cache, uint24 moduleId, uint64 operatorId) internal view {
-        _prepStakingModuleCache(cache, moduleId);
-        _prepNodeOperatorCache(cache, operatorId);
+    function _loadLidoNodeOperator(LidoOperatorCache memory cache, uint24 moduleId, uint64 operatorId) internal view {
+        _loadLidoModuleData(no, moduleId);
+        _loadLidoNodeOperatorData(no, operatorId);
     }
 
-    /// @dev module id validity check is done in the staking router
-    function _prepStakingModuleCache(StateCache memory cache, uint24 moduleId) internal view {
-        if (cache.modCache._cached && cache.modCache.id == moduleId) {
-            return;
-        }
+
+    function _loadLidoModuleData(LidoOperatorCache memory cache, uint24 moduleId) internal view {
+        /// @dev module id validity check is done in the staking router
         StakingModule memory module = _getStakingRouter().getStakingModule(moduleId);
 
-        cache.modCache = StakingModuleCache({
-            _cached: true,
-            id: moduleId,
-            status: StakingModuleStatus(module.status),
-            moduleAddress: module.stakingModuleAddress,
-            totalOperatorsCount: uint64(IStakingModule(module.stakingModuleAddress).getNodeOperatorsCount()),
-            moduleType: IStakingModule(module.stakingModuleAddress).getType()
-        });
+        no.moduleId = moduleId;
+        no.moduleAddress = module.stakingModuleAddress;
+        no.moduleStatus = StakingModuleStatus(module.status);
     }
 
-    function _prepNodeOperatorCache(StateCache memory cache, uint64 operatorId) internal view {
-        if (cache.noCache._cached && cache.noCache.id == operatorId && cache.noCache.moduleId == cache.modCache.id) {
-            return;
+    function _loadLidoNodeOperatorData(LidoOperatorCache memory cache, uint64 operatorId) internal view {
+        if (no.moduleId == 0) {
+            revert InvalidModuleId();
         }
+
         /// @dev check if module is not stopped
-        // if (cache.modCache.status == StakingModuleStatus.Stopped) {
+        // if (no.moduleStatus == StakingModuleStatus.Stopped) {
         //     revert InvalidModuleStatus();
         // }
 
         /// @dev check if the operatorId is valid
-        if (operatorId >= cache.modCache.totalOperatorsCount) {
+        uint64 totalOperatorsCount = uint64(IStakingModule(no.moduleAddress).getNodeOperatorsCount());
+        if (operatorId >= totalOperatorsCount) {
             revert InvalidOperatorId();
         }
 
-        bool isActive;
-        address rewardAddress;
-        uint64 totalKeys;
         /// @dev check for the CSModule type
-        if (cache.modCache.moduleType == CS_MODULE_TYPE) {
-            ICSModule module = ICSModule(cache.modCache.moduleAddress);
-            isActive = module.getNodeOperatorIsActive(operatorId);
+        bytes2 moduleType = IStakingModule(no.moduleAddress).getType();
+        if (moduleType == CS_MODULE_TYPE) {
+            ICSModule module = ICSModule(no.moduleAddress);
+            no.isActive = module.getNodeOperatorIsActive(operatorId);
             CSMNodeOperator memory operator = module.getNodeOperator(operatorId);
-            rewardAddress = operator.rewardAddress;
-            totalKeys = operator.totalAddedKeys;
+            no.rewardAddress = operator.rewardAddress;
+            no.totalKeys = operator.totalAddedKeys;
         } else {
-            ICuratedModule module = ICuratedModule(cache.modCache.moduleAddress);
-            (isActive,, rewardAddress,,, totalKeys) = module.getNodeOperator(operatorId, false);
+            ICuratedModule module = ICuratedModule(no.moduleAddress);
+            (no.isActive,, no.rewardAddress,,, no.totalKeys) = module.getNodeOperator(operatorId, false);
         }
 
-        cache.noCache = NodeOperatorCache({
-            _cached: true,
-            id: operatorId,
-            moduleId: cache.modCache.id,
-            isActive: isActive,
-            rewardAddress: rewardAddress,
-            totalKeys: totalKeys
-        });
     }
 }

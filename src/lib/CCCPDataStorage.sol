@@ -39,29 +39,32 @@ struct OperatorState {
     // 1st slot
     OperatorAttributes attr;
     // 2nd slot
-    OperatorOptInOutState optInOutState;
-    // 3rd slot
     OperatorKeysRangeState keysRangeState;
+    // 3rd slot
+    OperatorOptInOutState optInOutState;
     // 4+ slots
     OperatorExtraData extraData;
 }
 
 struct ModuleState {
-    bool isActive;
+    // is module disabled for pre-confs
+    bool isDisabled;
     // hopefully, we won't need more than 2^64 validators
     uint64 maxValidators;
 }
 
-struct OptInOutConfig {
+struct Config {
     // minimum duration of the opt-in period in blocks
     uint64 optInMinDurationBlocks;
     // delay in blocks before the operator can opt-in again after opt-out
     uint64 optOutDelayDurationBlocks;
+    uint64 defaultModuleMaxValidators;
+    uint64 defaultBlockGasLimit;
 }
 
 library CCCPDataStorage {
     struct CCCPData {
-        OptInOutConfig optInOut;
+        Config _config;
         mapping(address => OperatorState) _operators;
         // operator's reward to manager address mapping, allow operators not use their reward address
         mapping(address => address) _managers;
@@ -147,22 +150,22 @@ library CCCPDataStorage {
 
     /// CONFIG DATA
 
-    function _getConfigOptInOut() internal view returns (OptInOutConfig memory) {
-        return _getStorage().optInOut;
+    function _getConfigOptInOut() internal view returns (Config memory) {
+        return _getStorage()._config;
     }
 
     // function _getConfigOptInOutVars() internal view returns (uint64 optInMinDurationBlocks, uint64 optOutDelayDurationBlocks) {
-    //     OptInOutConfig memory optInOutCfg = _getConfigOptInOut();
+    //     Config memory optInOutCfg = _getConfigOptInOut();
     //     return (optInOutCfg.optInMinDurationBlocks, optInOutCfg.optOutDelayDurationBlocks);
     // }
 
-    function _setConfigOptInOut(OptInOutConfig memory config) internal {
-        _getStorage().optInOut = config;
+    function _setConfigOptInOut(Config memory config) internal {
+        _getStorage()._config = config;
     }
 
     // function _setConfigOptInOutVars(uint64 optInMinDurationBlocks, uint64 optOutDelayDurationBlocks) internal {
     //     _setConfigOptInOut(
-    //         OptInOutConfig({optInMinDurationBlocks: optInMinDurationBlocks, optOutDelayDurationBlocks: optOutDelayDurationBlocks})
+    //         Config({optInMinDurationBlocks: optInMinDurationBlocks, optOutDelayDurationBlocks: optOutDelayDurationBlocks})
     //     );
     // }
 }
