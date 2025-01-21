@@ -9,7 +9,8 @@
   "scripts": {
     "lint:solhint": "solhint './src/**/*.sol'",
     "lint:check": "prettier --check **.sol && yarn lint:solhint",
-    "lint:fix": "prettier --write **.sol"
+    "lint:fix": "prettier --write **.sol",
+    "generate:diffyscan": "node script/generateDiffyscanContracts.js"
   },
   "devDependencies": {
     "husky": "^9.1.7",
