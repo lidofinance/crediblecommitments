@@ -293,7 +293,6 @@ contract CredibleCommitmentCurationProvider is
         );
     }
 
-
     function resetForcedOptOut(uint24 moduleId, uint64 operatorId) external onlyRole(COMMITTEE_ROLE) {
         uint256 opKey = _getOpKeyById(moduleId, operatorId);
         OperatorOptInOutState memory optInOutState = opKey._getOperatorOptInOutState();
