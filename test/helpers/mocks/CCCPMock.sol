@@ -13,4 +13,8 @@ contract CCCPMock is CredibleCommitmentCurationProvider {
     function __test__getCSModuleType() external view returns (bytes32) {
         return CS_MODULE_TYPE;
     }
+
+    function initialize_v2() external reinitializer(2) {
+        _unpause();
+    }
 }
