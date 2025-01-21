@@ -151,6 +151,11 @@ contract CCCPOptIn is CCCPCommon {
     function test_OptIn() public {
         // opt in on behalf of noCsm1
         vm.broadcast(noCsm1);
+        vm.expectEmit(true, true, true, false, address(cccp));
+        emit CCCP.OptInSucceeded(csmId, noCsm1Id, noCsm1Manager);
+        vm.expectEmit(true, true, true, false, address(cccp));
+        emit CCCP.KeyRangeUpdated(csmId, noCsm1Id, 2, 4);
+
         cccp.optIn({
             moduleId: csmId,
             operatorId: noCsm1Id,
@@ -307,6 +312,34 @@ contract CCCPOptIn is CCCPCommon {
             manager: noCurated1Manager,
             newKeyIndexRangeStart: 2,
             newKeyIndexRangeEnd: 4,
+            rpcURL: ""
+        });
+    }
+
+    function test_OptIn_RevertWhen_KeyIndexWrongOrder() public {
+        // optin
+        vm.broadcast(noCsm1);
+        vm.expectRevert(CCCP.KeyIndexMismatch.selector);
+        cccp.optIn({
+            moduleId: csmId,
+            operatorId: noCsm1Id,
+            manager: noCsm1Manager,
+            newKeyIndexRangeStart: 4,
+            newKeyIndexRangeEnd: 2,
+            rpcURL: ""
+        });
+    }
+
+    function test_OptIn_RevertWhen_KeyIndexOutOfRange() public {
+        // optin
+        vm.broadcast(noCsm1);
+        vm.expectRevert(CCCP.KeyIndexOutOfRange.selector);
+        cccp.optIn({
+            moduleId: csmId,
+            operatorId: noCsm1Id,
+            manager: noCsm1Manager,
+            newKeyIndexRangeStart: 2,
+            newKeyIndexRangeEnd: 100,
             rpcURL: ""
         });
     }
