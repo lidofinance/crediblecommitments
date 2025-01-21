@@ -14,16 +14,28 @@ abstract contract StakingModuleMock is IStakingModule {
 
     NO[] public ops;
 
-    function addNo(bool active, address rewAddr, uint32 total) public {
+    function addNo(bool active, address rewAddr, uint32 keys) public {
         uint256 id = ops.length;
         ops.push();
-        updNo(id, active, rewAddr, total);
+        updNo(id, active, rewAddr, keys);
     }
 
-    function updNo(uint256 id, bool active, address rewAddr, uint32 total) public {
+    function updNo(uint256 id, bool active, address rewAddr, uint32 keys) public {
         ops[id].active = active;
         ops[id].rewardAddress = rewAddr;
-        ops[id].totalAddedValidators = total;
+        ops[id].totalAddedValidators = keys;
+    }
+
+    function updNoKeys(uint256 id, uint32 keys) public {
+        ops[id].totalAddedValidators = keys;
+    }
+
+    function updNoActive(uint256 id, bool active) public {
+        ops[id].active = active;
+    }
+
+    function updNoRewAddr(uint256 id, address rewAddr) public {
+        ops[id].rewardAddress = rewAddr;
     }
 
     function getNodeOperatorsCount() external view returns (uint256) {

@@ -9,7 +9,6 @@ contract StakingRouterMock is IStakingRouter {
     struct SM {
         uint24 id;
         address addr;
-        uint8 status;
     }
 
     SM[] public mods;
@@ -18,17 +17,16 @@ contract StakingRouterMock is IStakingRouter {
         mods.push();
     }
 
-    function addModule(address addr, uint8 status) public {
+    function addModule(address addr) public {
         uint24 id = uint24(mods.length);
         mods.push();
-        updModule(id, addr, status);
+        updModule(id, addr);
     }
 
-    function updModule(uint24 id, address addr, uint8 status) public {
+    function updModule(uint24 id, address addr) public {
         require(id > 0);
         mods[id].id = id;
         mods[id].addr = addr;
-        mods[id].status = status;
     }
 
     function getStakingModulesCount() external view returns (uint256) {
@@ -36,9 +34,10 @@ contract StakingRouterMock is IStakingRouter {
     }
 
     function getStakingModule(uint256 id) external view returns (StakingModule memory sm) {
-        require(id > 0);
+        if (id == 0 || id >= mods.length) {
+            revert StakingModuleUnregistered();
+        }
         sm.id = mods[id].id;
         sm.stakingModuleAddress = mods[id].addr;
-        sm.status = mods[id].status;
     }
 }

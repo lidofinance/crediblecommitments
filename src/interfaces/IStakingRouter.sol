@@ -20,6 +20,8 @@ struct StakingModule {
 }
 
 interface IStakingRouter {
+    error StakingModuleUnregistered();
+
     function getStakingModulesCount() external view returns (uint256);
     function getStakingModule(uint256 stakingModuleId) external view returns (StakingModule memory);
 }
