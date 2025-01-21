@@ -56,14 +56,15 @@ abstract contract DeployBase is Script {
                 address(new CredibleCommitmentCurationProvider(config.lidoLocatorAddress, config.csModuleType));
             console.log("CCCP impl address", address(cccpImpl));
 
-            cccp = CredibleCommitmentCurationProvider(_deployProxy(config.proxyAdmin, address(cccpImpl)));
-            cccp.initialize({
-                committeeAddress: config.committeeAddress,
-                optInMinDurationBlocks: config.optInMinDurationBlocks,
-                optOutDelayDurationBlocks: config.optOutDelayDurationBlocks,
-                defaultOperatorMaxValidators: config.defaultOperatorMaxValidators,
-                defaultBlockGasLimit: config.defaultBlockGasLimit
-            });
+            cccp = CredibleCommitmentCurationProvider(_deployProxy(config.proxyAdmin, address(cccpImpl),
+                abi.encodeCall(CredibleCommitmentCurationProvider.initialize, (
+                    config.committeeAddress,
+                    config.optInMinDurationBlocks,
+                    config.optOutDelayDurationBlocks,
+                    config.defaultOperatorMaxValidators,
+                    config.defaultBlockGasLimit
+                ))
+            ));
             console.log("CCCP address", address(cccp));
 
             JsonObj memory deployJson = Json.newObj();
@@ -78,9 +79,9 @@ abstract contract DeployBase is Script {
         vm.stopBroadcast();
     }
 
-    function _deployProxy(address admin, address implementation) internal returns (address) {
+    function _deployProxy(address admin, address implementation, bytes memory data) internal returns (address) {
         OssifiableProxy proxy =
-            new OssifiableProxy({implementation_: implementation, data_: new bytes(0), admin_: admin});
+            new OssifiableProxy({implementation_: implementation, data_: data, admin_: admin});
 
         return address(proxy);
     }
