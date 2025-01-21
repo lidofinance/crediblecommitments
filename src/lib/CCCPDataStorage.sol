@@ -25,24 +25,14 @@ struct OperatorKeysRangeState {
     uint64 indexEnd;
 }
 
-struct OperatorAttributes {
-    uint24 moduleId;
-    uint64 operatorId;
-}
-// address managerAddress;
-
 struct OperatorExtraData {
     string rpcURL;
 }
 
 struct OperatorState {
-    // 1st slot
-    OperatorAttributes attr;
-    // 2nd slot
+    address manager;
     OperatorKeysRangeState keysRangeState;
-    // 3rd slot
     OperatorOptInOutState optInOutState;
-    // 4+ slots
     OperatorExtraData extraData;
 }
 
@@ -58,84 +48,105 @@ struct Config {
     uint64 optInMinDurationBlocks;
     // delay in blocks before the operator can opt-in again after opt-out
     uint64 optOutDelayDurationBlocks;
-    uint64 defaultModuleMaxValidators;
+    uint64 defaultOperatorMaxValidators; //todo rename to per op
     uint64 defaultBlockGasLimit;
 }
 
 library CCCPDataStorage {
     struct CCCPData {
-        Config _config;
-        mapping(address => OperatorState) _operators;
-        // operator's reward to manager address mapping, allow operators not use their reward address
-        mapping(address => address) _managers;
+        // opKey (module id + operator id) => operator state
+        mapping(uint256 => OperatorState) _operators;
+        // manager address to opKey
+        mapping(address => uint256) _managers;
+        // modules state
         mapping(uint256 => ModuleState) _modules;
+        // config
+        Config _config;
     }
 
     // keccak256(abi.encode(uint256(keccak256("lido.cccp.CCCPData")) - 1)) & ~bytes32(uint256(0xff))
     bytes32 internal constant CCCP_DATA_LOCATION = 0x250c379b4df7db4aa0cebfe63c44e477918a4a35c66c19b68448ebd5517bd100;
 
-    function _getStorage() internal pure returns (CCCPData storage $) {
+    error ManagerBelongsToOtherOperator();
+
+    function _getStorage() private pure returns (CCCPData storage $) {
         assembly {
             $.slot := CCCP_DATA_LOCATION
         }
     }
 
-    function _getOperatorStateStorage(address managerAddress) private view returns (OperatorState storage) {
-        return _getStorage()._operators[managerAddress];
+    function _getOperatorStateStorage(uint256 opKey) private view returns (OperatorState storage) {
+        return _getStorage()._operators[opKey];
     }
 
     /// @notice get operator' full state
-    function _getOperatorState(address managerAddress) internal view returns (OperatorState memory) {
-        return _getStorage()._operators[managerAddress];
-    }
-
-    // function _setOperatorState(address managerAddress, OperatorState memory state) internal {
-    //     _getStorage()._operators[managerAddress] = operator;
-    // }
-
-    /// @notice get operator's attributes
-    function _getOperatorAttributes(address managerAddress) internal view returns (OperatorAttributes memory) {
-        return _getOperatorStateStorage(managerAddress).attr;
-    }
-
-    function _setOperatorAttributes(address managerAddress, OperatorAttributes memory attr) internal {
-        _getOperatorStateStorage(managerAddress).attr = attr;
+    function _getOperatorState(uint256 opKey) internal view returns (OperatorState memory) {
+        return _getOperatorStateStorage(opKey);
     }
 
     /// @notice get operator's opt-in/opt-out state
-    function _getOperatorOptInOutState(address managerAddress) internal view returns (OperatorOptInOutState memory) {
-        return _getOperatorStateStorage(managerAddress).optInOutState;
+    function _getOperatorOptInOutState(uint256 opKey) internal view returns (OperatorOptInOutState memory) {
+        return _getOperatorStateStorage(opKey).optInOutState;
     }
 
-    function _setOperatorOptInOutState(address managerAddress, OperatorOptInOutState memory state) internal {
-        _getOperatorStateStorage(managerAddress).optInOutState = state;
+    function _setOperatorOptInOutState(uint256 opKey, OperatorOptInOutState memory state) internal {
+        _getOperatorStateStorage(opKey).optInOutState = state;
     }
 
     /// @notice get operator's keys range state
-    function _getOperatorKeysRangeState(address managerAddress) internal view returns (OperatorKeysRangeState memory) {
-        return _getOperatorStateStorage(managerAddress).keysRangeState;
+    function _getOperatorKeysRangeState(uint256 opKey) internal view returns (OperatorKeysRangeState memory) {
+        return _getOperatorStateStorage(opKey).keysRangeState;
     }
 
-    function _setOperatorKeysRangeState(address managerAddress, OperatorKeysRangeState memory state) internal {
-        _getOperatorStateStorage(managerAddress).keysRangeState = state;
+    function _setOperatorKeysRangeState(uint256 opKey, OperatorKeysRangeState memory state) internal {
+        _getOperatorStateStorage(opKey).keysRangeState = state;
     }
 
     /// @notice get operator's extra data
-    function _getOperatorExtraData(address managerAddress) internal view returns (OperatorExtraData memory) {
-        return _getOperatorStateStorage(managerAddress).extraData;
+    function _getOperatorExtraData(uint256 opKey) internal view returns (OperatorExtraData memory) {
+        return _getOperatorStateStorage(opKey).extraData;
     }
 
-    function _setOperatorExtraData(address managerAddress, OperatorExtraData memory data) internal {
-        _getOperatorStateStorage(managerAddress).extraData = data;
+    function _setOperatorExtraData(uint256 opKey, OperatorExtraData memory data) internal {
+        _getOperatorStateStorage(opKey).extraData = data;
     }
 
     /// @notice get manager address linked to the operator's reward address
-    function _getOperatorManager(address rewardAddress) internal view returns (address managerAddress) {
-        return _getStorage()._managers[rewardAddress];
+    function _getOperatorManager(uint256 opKey) internal view returns (address managerAddress) {
+        return _getOperatorStateStorage(opKey).manager;
     }
 
-    function _setOperatorManager(address rewardAddress, address managerAddress) internal {
-        _getStorage()._managers[rewardAddress] = managerAddress;
+    /// @dev safe manager address update
+    function _setOperatorManager(uint256 opKey, address manager) internal {
+        _checkManager(opKey, manager);
+        OperatorState storage $ = _getOperatorStateStorage(opKey);
+
+        address oldManager = $.manager;
+        if (oldManager != address(0) && oldManager != manager) {
+            delete _getStorage()._managers[oldManager];
+        }
+        $.manager = manager;
+        _getStorage()._managers[manager] = opKey;
+    }
+
+    function _getManagerOpKey(address manager) internal view returns (uint256) {
+        return _getStorage()._managers[manager];
+    }
+
+    function _checkManager(uint256 opKey, address manager) internal view {
+        uint256 managerOpKey = _getManagerOpKey(manager);
+        // revert if the manager address is linked to the other operator
+        if (managerOpKey != 0 && managerOpKey != opKey) {
+            revert ManagerBelongsToOtherOperator();
+        }
+    }
+
+    function __encOpKey(uint24 moduleId, uint64 operatorId) internal pure returns (uint256) {
+        return uint256(moduleId) << 64 | operatorId;
+    }
+
+    function __decOpKey(uint256 opKey) internal pure returns (uint24 moduleId, uint64 operatorId) {
+        return (uint24(opKey >> 64), uint64(opKey));
     }
 
     /// MODULES DATA
@@ -150,22 +161,11 @@ library CCCPDataStorage {
 
     /// CONFIG DATA
 
-    function _getConfigOptInOut() internal view returns (Config memory) {
+    function _getConfig() internal view returns (Config memory) {
         return _getStorage()._config;
     }
 
-    // function _getConfigOptInOutVars() internal view returns (uint64 optInMinDurationBlocks, uint64 optOutDelayDurationBlocks) {
-    //     Config memory optInOutCfg = _getConfigOptInOut();
-    //     return (optInOutCfg.optInMinDurationBlocks, optInOutCfg.optOutDelayDurationBlocks);
-    // }
-
-    function _setConfigOptInOut(Config memory config) internal {
+    function _setConfig(Config memory config) internal {
         _getStorage()._config = config;
     }
-
-    // function _setConfigOptInOutVars(uint64 optInMinDurationBlocks, uint64 optOutDelayDurationBlocks) internal {
-    //     _setConfigOptInOut(
-    //         Config({optInMinDurationBlocks: optInMinDurationBlocks, optOutDelayDurationBlocks: optOutDelayDurationBlocks})
-    //     );
-    // }
 }
