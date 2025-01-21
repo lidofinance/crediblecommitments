@@ -2,7 +2,7 @@
 pragma solidity 0.8.28;
 
 import {Test, console} from "forge-std/Test.sol";
-import {CCCPDataStorage as DS, ModuleState, OptInOutConfig} from "../src/lib/CCCPDataStorage.sol";
+import {CCCPDataStorage as DS, ModuleState, Config} from "../src/lib/CCCPDataStorage.sol";
 
 contract ModulesDataStorageTest is Test {
     function setUp() public {
@@ -18,29 +18,30 @@ contract ModulesDataStorageTest is Test {
     function test_ModuleState() public {
         uint24 moduleId = 111;
         uint64 maxValidators = 1111;
-        ModuleState memory state = ModuleState({isActive: true, maxValidators: maxValidators});
+        ModuleState memory state = ModuleState({isDisabled: true, maxValidators: maxValidators});
 
         DS._setModuleState(moduleId, state);
         ModuleState memory newState = DS._getModuleState(moduleId);
 
         assertEq(newState.maxValidators, maxValidators);
-        assertEq(newState.isActive, true);
+        assertEq(newState.isDisabled, true);
     }
 
     function test_OptInOutConfig() public {
         uint64 optInMinDurationBlocks = 123;
         uint64 optOutDelayDurationBlocks = 234;
-        OptInOutConfig memory cfg = OptInOutConfig(optInMinDurationBlocks, optOutDelayDurationBlocks);
+        uint64 defaultOperatorMaxValidators = 100;
+        uint64 defaultBlockGasLimit = 1000000;
+        Config memory cfg = Config(
+            optInMinDurationBlocks, optOutDelayDurationBlocks, defaultOperatorMaxValidators, defaultBlockGasLimit
+        );
 
-        DS._setConfigOptInOut(cfg);
-        OptInOutConfig memory newCfg = DS._getConfigOptInOut();
+        DS._setConfig(cfg);
+        Config memory newCfg = DS._getConfig();
 
         assertEq(newCfg.optInMinDurationBlocks, optInMinDurationBlocks);
         assertEq(newCfg.optOutDelayDurationBlocks, optOutDelayDurationBlocks);
+        assertEq(newCfg.defaultOperatorMaxValidators, defaultOperatorMaxValidators);
+        assertEq(newCfg.defaultBlockGasLimit, defaultBlockGasLimit);
     }
-
-    // function testFuzz_SetNumber(uint256 x) public {
-    //     counter.setNumber(x);
-    //     assertEq(counter.number(), x);
-    // }
 }

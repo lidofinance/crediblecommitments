@@ -19,7 +19,7 @@ import {CSModuleMock} from "./mocks/CSModuleMock.sol";
 contract Fixtures is StdCheats, Test {
     bytes32 public constant INITIALIZABLE_STORAGE = 0xf0c57e16840df040f15088dc2f81fe391c3923bec73e23a9662efc9c229c6a00;
 
-    function initStakingModules()
+    function initLidoMock()
         public
         returns (LidoLocatorMock locator, StakingRouterMock sr, CuratedModuleMock nor, CSModuleMock csm)
     {
@@ -28,8 +28,8 @@ contract Fixtures is StdCheats, Test {
         sr = new StakingRouterMock();
 
         // add modules to SR
-        sr.addModule(address(nor), 0);
-        sr.addModule(address(csm), 0);
+        sr.addModule(address(nor));
+        sr.addModule(address(csm));
 
         locator = new LidoLocatorMock(address(sr));
 
@@ -46,10 +46,6 @@ contract Fixtures is StdCheats, Test {
 }
 
 contract DeploymentFixtures is StdCheats, Test {
-    CredibleCommitmentCurationProvider public cccp;
-    ILidoLocator public locator;
-    IStakingRouter public stakingRouter;
-
     struct Env {
         string RPC_URL;
         string DEPLOY_CONFIG;
@@ -60,6 +56,10 @@ contract DeploymentFixtures is StdCheats, Test {
         address cccp;
         address lidoLocator;
     }
+
+    CredibleCommitmentCurationProvider public cccp;
+    ILidoLocator public locator;
+    IStakingRouter public stakingRouter;
 
     function envVars() public returns (Env memory) {
         Env memory env = Env(vm.envOr("RPC_URL", string("")), vm.envOr("DEPLOY_CONFIG", string("")));

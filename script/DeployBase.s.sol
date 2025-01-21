@@ -13,11 +13,12 @@ import {JsonObj, Json} from "./utils/Json.sol";
 struct DeployParams {
     address lidoLocatorAddress;
     bytes32 csModuleType;
-    uint64 defaultMaxValidators;
     address proxyAdmin;
     address committeeAddress;
     uint64 optInMinDurationBlocks;
     uint64 optOutDelayDurationBlocks;
+    uint64 defaultOperatorMaxValidators;
+    uint64 defaultBlockGasLimit;
 }
 
 abstract contract DeployBase is Script {
@@ -51,18 +52,17 @@ abstract contract DeployBase is Script {
 
         vm.startBroadcast(pk);
         {
-            address cccpImpl = address(
-                new CredibleCommitmentCurationProvider(
-                    config.lidoLocatorAddress, config.csModuleType, config.defaultMaxValidators
-                )
-            );
+            address cccpImpl =
+                address(new CredibleCommitmentCurationProvider(config.lidoLocatorAddress, config.csModuleType));
             console.log("CCCP impl address", address(cccpImpl));
 
             cccp = CredibleCommitmentCurationProvider(_deployProxy(config.proxyAdmin, address(cccpImpl)));
             cccp.initialize({
                 committeeAddress: config.committeeAddress,
                 optInMinDurationBlocks: config.optInMinDurationBlocks,
-                optOutDelayDurationBlocks: config.optOutDelayDurationBlocks
+                optOutDelayDurationBlocks: config.optOutDelayDurationBlocks,
+                defaultOperatorMaxValidators: config.defaultOperatorMaxValidators,
+                defaultBlockGasLimit: config.defaultBlockGasLimit
             });
             console.log("CCCP address", address(cccp));
 
