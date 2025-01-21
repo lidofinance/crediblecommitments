@@ -3,8 +3,7 @@
 
 pragma solidity 0.8.28;
 
-import {Script, console} from "forge-std/Script.sol";
-// import {Upgrades, Options} from "openzeppelin-foundry-upgrades/Upgrades.sol";
+import {Script} from "forge-std/Script.sol";
 import {OssifiableProxy} from "../src/lib/proxy/OssifiableProxy.sol";
 import {CredibleCommitmentCurationProvider} from "../src/CredibleCommitmentCurationProvider.sol";
 
@@ -45,7 +44,7 @@ abstract contract DeployBase is Script {
             revert ChainIdMismatch({actual: block.chainid, expected: chainId});
         }
 
-        artifactDir = vm.envOr("ARTIFACTS_DIR", string("./artifacts/"));
+        artifactDir = vm.envOr("ARTIFACTS_DIR", string("./artifacts/local/"));
         pk = vm.envUint("DEPLOYER_PRIVATE_KEY");
         deployer = vm.addr(pk);
         vm.label(deployer, "DEPLOYER");
@@ -54,18 +53,23 @@ abstract contract DeployBase is Script {
         {
             address cccpImpl =
                 address(new CredibleCommitmentCurationProvider(config.lidoLocatorAddress, config.csModuleType));
-            console.log("CCCP impl address", address(cccpImpl));
 
-            cccp = CredibleCommitmentCurationProvider(_deployProxy(config.proxyAdmin, address(cccpImpl),
-                abi.encodeCall(CredibleCommitmentCurationProvider.initialize, (
-                    config.committeeAddress,
-                    config.optInMinDurationBlocks,
-                    config.optOutDelayDurationBlocks,
-                    config.defaultOperatorMaxValidators,
-                    config.defaultBlockGasLimit
-                ))
-            ));
-            console.log("CCCP address", address(cccp));
+            cccp = CredibleCommitmentCurationProvider(
+                _deployProxy(
+                    config.proxyAdmin,
+                    address(cccpImpl),
+                    abi.encodeCall(
+                        CredibleCommitmentCurationProvider.initialize,
+                        (
+                            config.committeeAddress,
+                            config.optInMinDurationBlocks,
+                            config.optOutDelayDurationBlocks,
+                            config.defaultOperatorMaxValidators,
+                            config.defaultBlockGasLimit
+                        )
+                    )
+                )
+            );
 
             JsonObj memory deployJson = Json.newObj();
             deployJson.set("ChainId", chainId);
@@ -80,8 +84,7 @@ abstract contract DeployBase is Script {
     }
 
     function _deployProxy(address admin, address implementation, bytes memory data) internal returns (address) {
-        OssifiableProxy proxy =
-            new OssifiableProxy({implementation_: implementation, data_: data, admin_: admin});
+        OssifiableProxy proxy = new OssifiableProxy({implementation_: implementation, data_: data, admin_: admin});
 
         return address(proxy);
     }

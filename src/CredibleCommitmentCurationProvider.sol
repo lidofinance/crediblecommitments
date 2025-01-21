@@ -139,7 +139,7 @@ contract CredibleCommitmentCurationProvider is
         address manager,
         uint64 newKeyIndexRangeStart,
         uint64 newKeyIndexRangeEnd,
-        string memory rpcURL
+        string calldata rpcURL
     ) external whenNotPaused {
         LidoOperatorCache memory _c;
 
