@@ -66,20 +66,19 @@ contract CredibleCommitmentCurationProvider is
         uint256 defaultBlockGasLimit
     );
     event ResetForcedOptOut(uint256 indexed moduleId, uint256 indexed operatorId);
+    event OperatorManagerUpdated(uint256 indexed moduleId, uint256 indexed operatorId, address manager);
 
     error OperatorNotRegistered();
     error ManagerNotRegistered();
     error RewardAddressMismatch();
     error OperatorNotActive();
     error ModuleDisabled();
-    error SameValue();
     error OperatorAlreadyRegistered();
     error OperatorOptInNotAllowed();
     error OperatorOptOutNotAllowed();
     error KeyIndexOutOfRange();
     error KeysRangeExceedMaxValidators();
     error KeyIndexMismatch();
-
     error InvalidOperatorId();
     error InvalidModuleId();
     error ZeroCommitteeAddress();
@@ -171,16 +170,18 @@ contract CredibleCommitmentCurationProvider is
         // save operator state
         /// @dev also checks if the proposed manager is already registered for different operator
         opKey._setOperatorManager(manager);
+        emit OperatorManagerUpdated(moduleId, operatorId, manager);
+
         opKey._setOperatorOptInOutState(
             OperatorOptInOutState({optInBlock: uint64(block.number), optOutBlock: 0, isOptOutForced: false})
         );
-        emit OptInSucceeded(moduleId, operatorId, manager);
-
         _checkAndUpdateKeysRange(_c, opKey, newKeyIndexRangeStart, newKeyIndexRangeEnd);
 
         /// @dev no checks on rpcUrl, so it can be rewritten on repeated opt-in
         opKey._setOperatorExtraData(OperatorExtraData({rpcURL: rpcURL}));
-        // emit RPCUrlUpdated(moduleId, operatorId, rpcURL);
+        emit RPCUrlUpdated(moduleId, operatorId, rpcURL);
+
+        emit OptInSucceeded(moduleId, operatorId, manager);
     }
 
     /// @notice Opt-out operator on behalf of the operator manager
@@ -254,6 +255,8 @@ contract CredibleCommitmentCurationProvider is
         uint256 opKey = DS.__encOpKey(moduleId, operatorId);
         /// @dev also checks if the proposed manager is already registered for different operator
         opKey._setOperatorManager(newManager);
+
+        emit OperatorManagerUpdated(moduleId, operatorId, newManager);
     }
 
     function getOperator(address manager)
