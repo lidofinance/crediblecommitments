@@ -404,7 +404,8 @@ contract CredibleCommitmentCurationProvider is
         // - if it's s opted in
         // - if module not disabled
         // - if operator is active in Lido module
-        isEnabled = flags.isOptedIn && !moduleState.isDisabled && _c.isActive;
+        // - if the contract is not paused
+        isEnabled = flags.isOptedIn && !moduleState.isDisabled && _c.isActive && !paused();
 
         return (
             _c.moduleId,
