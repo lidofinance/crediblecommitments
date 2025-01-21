@@ -27,7 +27,7 @@ contract ModulesDataStorageTest is Test {
         assertEq(newState.isDisabled, true);
     }
 
-    function test_OptInOutConfig() public {
+    function test_Config() public {
         uint64 optInMinDurationBlocks = 123;
         uint64 optOutDelayDurationBlocks = 234;
         uint64 defaultOperatorMaxValidators = 100;
