@@ -48,6 +48,9 @@ contract CredibleCommitmentCurationProvider is
     }
 
     bytes32 public constant COMMITTEE_ROLE = keccak256("COMMITTEE_ROLE");
+    bytes32 public constant PAUSE_ROLE = keccak256("PAUSE_ROLE");
+    bytes32 public constant RESUME_ROLE = keccak256("RESUME_ROLE");
+
     ILidoLocator public immutable LIDO_LOCATOR;
     // hardcoded CSModule type, used for the operator's state retrieval
     bytes32 internal immutable CS_MODULE_TYPE;
@@ -110,6 +113,8 @@ contract CredibleCommitmentCurationProvider is
 
         _grantRole(DEFAULT_ADMIN_ROLE, committeeAddress);
         _grantRole(COMMITTEE_ROLE, committeeAddress);
+        _grantRole(PAUSE_ROLE, committeeAddress);
+        _grantRole(RESUME_ROLE, committeeAddress);
 
         _setConfig(
             optInMinDurationBlocks, optOutDelayDurationBlocks, defaultOperatorMaxValidators, defaultBlockGasLimit
@@ -117,12 +122,12 @@ contract CredibleCommitmentCurationProvider is
     }
 
     /// @notice Resume all operations after a pause
-    function unpause() external onlyRole(COMMITTEE_ROLE) {
+    function unpause() external onlyRole(RESUME_ROLE) {
         _unpause();
     }
 
     /// @notice Pause all operations
-    function pause() external onlyRole(COMMITTEE_ROLE) {
+    function pause() external onlyRole(PAUSE_ROLE) {
         _pause();
     }
 
