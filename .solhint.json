@@ -1,7 +1,8 @@
 {
   "extends": "solhint:recommended",
-  "plugins": [""],
+  "plugins": ["lido-csm"],
   "rules": {
+    "constructor-syntax": "error",
     "compiler-version": ["error", "0.8.28"],
     "no-inline-assembly": "off",
     "no-unused-import": "error",
@@ -10,7 +11,8 @@
     "reason-string": ["warn", { "maxLength": 64 }],
     "immutable-vars-naming": ["error", { "immutablesAsConstants": true }],
     "var-name-mixedcase": "error",
-    "func-name-mixedcase": "error",
+    "func-name-mixedcase": "warn",
+    "foundry-test-functions": ["warn", ["setUp"]],
     "no-global-import": "error",
     "ordering": "warn",
     "gas-calldata-parameters": "error",

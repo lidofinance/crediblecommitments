@@ -57,6 +57,13 @@ __metadata:
   languageName: node
   linkType: hard
 
+"@solidity-parser/parser@npm:^0.18.0":
+  version: 0.18.0
+  resolution: "@solidity-parser/parser@npm:0.18.0"
+  checksum: 10c0/c54b4c9ba10e1fd1cd45894040135a39b9bc527f0ac40bec732d8628b0c0c7cb7ec2b7e816b408d613ab1d71c04f9555111ccc83b6dbaed2e39ff4ef7d000e25
+  languageName: node
+  linkType: hard
+
 "@solidity-parser/parser@npm:^0.19.0":
   version: 0.19.0
   resolution: "@solidity-parser/parser@npm:0.19.0"
@@ -334,6 +341,7 @@ __metadata:
     prettier: "npm:^3.4.2"
     prettier-plugin-solidity: "npm:^1.4.2"
     solhint: "npm:5.0.4"
+    solhint-plugin-lido-csm: "https://github.com/lidofinance/solhint-plugin-lido-csm.git#0.3.3"
   languageName: unknown
   linkType: soft
 
@@ -1218,6 +1226,47 @@ __metadata:
     ansi-styles: "npm:^6.2.1"
     is-fullwidth-code-point: "npm:^5.0.0"
   checksum: 10c0/631c971d4abf56cf880f034d43fcc44ff883624867bf11ecbd538c47343911d734a4656d7bc02362b40b89d765652a7f935595441e519b59e2ad3f4d5d6fe7ca
+  languageName: node
+  linkType: hard
+
+"solhint-plugin-lido-csm@https://github.com/lidofinance/solhint-plugin-lido-csm.git#0.3.3":
+  version: 0.3.3
+  resolution: "solhint-plugin-lido-csm@https://github.com/lidofinance/solhint-plugin-lido-csm.git#commit=db949adb893af939bfb1ca5ba191c26fd94aa69c"
+  dependencies:
+    solhint: "npm:4.5.2"
+  checksum: 10c0/3bbd7fcfd8adda38f8291586a0d29afcdd33bea20dc48b82cdd020696e6772f8c660bfa8468c8d9da4133b08d796bf08f7ef09f67b714c7a96a6193e7c3b6ce5
+  languageName: node
+  linkType: hard
+
+"solhint@npm:4.5.2":
+  version: 4.5.2
+  resolution: "solhint@npm:4.5.2"
+  dependencies:
+    "@solidity-parser/parser": "npm:^0.18.0"
+    ajv: "npm:^6.12.6"
+    antlr4: "npm:^4.13.1-patch-1"
+    ast-parents: "npm:^0.0.1"
+    chalk: "npm:^4.1.2"
+    commander: "npm:^10.0.0"
+    cosmiconfig: "npm:^8.0.0"
+    fast-diff: "npm:^1.2.0"
+    glob: "npm:^8.0.3"
+    ignore: "npm:^5.2.4"
+    js-yaml: "npm:^4.1.0"
+    latest-version: "npm:^7.0.0"
+    lodash: "npm:^4.17.21"
+    pluralize: "npm:^8.0.0"
+    prettier: "npm:^2.8.3"
+    semver: "npm:^7.5.2"
+    strip-ansi: "npm:^6.0.1"
+    table: "npm:^6.8.1"
+    text-table: "npm:^0.2.0"
+  dependenciesMeta:
+    prettier:
+      optional: true
+  bin:
+    solhint: solhint.js
+  checksum: 10c0/a54cc8df54ed711ca6be783b9291eb9e838f518f236d4df05c6ef412ead6a21f4a5bf3bace62ca7d2ed69f4566d5289db4c8c93e0c5e23ac91401904e1f1f312
   languageName: node
   linkType: hard
 

@@ -16,7 +16,8 @@
     "lint-staged": "^15.3.0",
     "prettier": "^3.4.2",
     "prettier-plugin-solidity": "^1.4.2",
-    "solhint": "5.0.4"
+    "solhint": "5.0.4",
+    "solhint-plugin-lido-csm": "https://github.com/lidofinance/solhint-plugin-lido-csm.git#0.3.3"
   },
   "lint-staged": {
     "*": "prettier --ignore-unknown --write",
