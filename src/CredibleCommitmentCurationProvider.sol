@@ -127,10 +127,7 @@ contract CredibleCommitmentCurationProvider is
     }
 
     /// @notice Opt-in operator to the module
-    /// @dev prevent a repeated optin same operator with a different manager address,
-    ///      or in case when operator changed reward address in the module,
-    ///      the manager's address must first be changed to the new one
-    ///      from operator's reward address (see `updateManagerAddress`)
+    /// @dev allows a repeated optin with different manager address
     function optIn(
         uint24 moduleId,
         uint64 operatorId,
@@ -221,6 +218,8 @@ contract CredibleCommitmentCurationProvider is
         emit OptOutRequested(moduleId, operatorId, true);
     }
 
+    /// @notice Update the operator's keys range
+    /// @dev should be called by the operator manager address
     function updateKeysRange(uint64 newKeyIndexRangeStart, uint64 newKeyIndexRangeEnd) external whenNotPaused {
         uint256 opKey = _getOpKeyByManager(msg.sender);
         OperatorOptInOutFlags memory flags = _calcOptInOutFlags(opKey._getOperatorOptInOutState());
@@ -240,6 +239,8 @@ contract CredibleCommitmentCurationProvider is
         _checkAndUpdateKeysRange(_c, opKey, newKeyIndexRangeStart, newKeyIndexRangeEnd);
     }
 
+    /// @notice Update the operator's manager address
+    /// @dev should be called by the operator reward address
     function updateManager(uint24 moduleId, uint64 operatorId, address newManager) external whenNotPaused {
         if (newManager == address(0)) revert ZeroOperatorManagerAddress();
 
@@ -252,7 +253,8 @@ contract CredibleCommitmentCurationProvider is
             revert RewardAddressMismatch();
         }
 
-        uint256 opKey = DS.__encOpKey(moduleId, operatorId);
+        uint256 opKey = _getOpKeyById(moduleId, operatorId);
+
         /// @dev also checks if the proposed manager is already registered for different operator
         opKey._setOperatorManager(newManager);
 
@@ -294,6 +296,10 @@ contract CredibleCommitmentCurationProvider is
             cfg.defaultOperatorMaxValidators,
             cfg.defaultBlockGasLimit
         );
+    }
+
+    function getContractVersion() external view returns (uint64) {
+        return _getInitializedVersion();
     }
 
     function resetForcedOptOut(uint24 moduleId, uint64 operatorId) external onlyRole(COMMITTEE_ROLE) {
@@ -438,6 +444,7 @@ contract CredibleCommitmentCurationProvider is
         }
     }
 
+    /// @dev reverts if the operator not registered
     function _getOpKeyById(uint24 moduleId, uint64 operatorId) internal view returns (uint256 opKey) {
         opKey = DS.__encOpKey(moduleId, operatorId);
         if (opKey._getOperatorManager() == address(0)) {
@@ -470,8 +477,6 @@ contract CredibleCommitmentCurationProvider is
         uint64 blockNumber = uint64(block.number);
         Config memory cfg = DS._getConfig();
 
-        // bool optOutInProgress =
-        //     optInOutState.optOutBlock > 0 && optInOutState.optOutBlock + cfg.optOutDelayDurationBlocks >= blockNumber;
         bool isOptedOut =
             optInOutState.optOutBlock > 0 && optInOutState.optOutBlock + cfg.optOutDelayDurationBlocks < blockNumber;
         bool isOptedIn = optInOutState.optInBlock > 0 && !isOptedOut;

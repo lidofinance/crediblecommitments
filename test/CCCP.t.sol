@@ -71,6 +71,7 @@ contract CCCPInitialize is CCCPCommon {
         CCCPMock cccp = new CCCPMock({lidoLocator: address(locator), csModuleType: "csm-type"});
         assertEq(cccp.__test__getCSModuleType(), "csm-type");
         assertEq(address(cccp.LIDO_LOCATOR()), address(locator));
+        assertEq(cccp.getContractVersion(), type(uint64).max);
     }
 
     function test_constructor_RevertWhen_ZeroLocator() public {
@@ -113,6 +114,7 @@ contract CCCPInitialize is CCCPCommon {
         assertEq(optOutDelayDurationBlocks, 64);
         assertEq(defaultOperatorMaxValidators, 10);
         assertEq(defaultBlockGasLimit, 1000000);
+        assertEq(cccp.getContractVersion(), 1);
         assertFalse(cccp.paused());
     }
 }
@@ -152,9 +154,9 @@ contract CCCPOptIn is CCCPCommon {
         // opt in on behalf of noCsm1
         vm.broadcast(noCsm1);
         vm.expectEmit(true, true, true, false, address(cccp));
-        emit CCCP.OptInSucceeded(csmId, noCsm1Id, noCsm1Manager);
-        vm.expectEmit(true, true, true, false, address(cccp));
         emit CCCP.KeyRangeUpdated(csmId, noCsm1Id, 2, 4);
+        vm.expectEmit(true, true, true, false, address(cccp));
+        emit CCCP.OptInSucceeded(csmId, noCsm1Id, noCsm1Manager);
 
         cccp.optIn({
             moduleId: csmId,
