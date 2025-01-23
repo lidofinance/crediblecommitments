@@ -18,7 +18,7 @@ block_gas_limit = 30_000_000
 fuzz = { runs = 256 }
 
 gas_reports = [
-    "CredibleCommitmentCurationProvider",
+    "CCCP",
     "CCCPDataStorage",
     "OssifiableProxy"
 ]
