@@ -8,15 +8,9 @@ import {AccessControlEnumerableUpgradeable} from
     "@openzeppelin/contracts-upgradeable/access/extensions/AccessControlEnumerableUpgradeable.sol";
 import {PausableUpgradeable} from "@openzeppelin/contracts-upgradeable/utils/PausableUpgradeable.sol";
 
-import {
-    CCCPDataStorage as DS,
-    OperatorState,
-    OperatorOptInOutState,
-    OperatorKeysRangeState,
-    OperatorExtraData,
-    ModuleState,
-    Config
-} from "./lib/CCCPDataStorage.sol";
+import {CCCPOperatorStatesStorage} from "./lib/CCCPOperatorStatesStorage.sol";
+import {CCCPConfigStorage} from "./lib/CCCPConfigStorage.sol";
+import {ICCCP} from "./interfaces/ICCCP.sol";
 
 import {ILidoLocator} from "./interfaces/ILidoLocator.sol";
 import {StakingModule, IStakingRouter} from "./interfaces/IStakingRouter.sol";
@@ -24,13 +18,18 @@ import {IStakingModule} from "./interfaces/IStakingModule.sol";
 import {CSMNodeOperator, ICSModule} from "./interfaces/ICSModule.sol";
 import {ICuratedModule} from "./interfaces/ICuratedModule.sol";
 
-contract CredibleCommitmentCurationProvider is
+/**
+ * @title CCCP
+ * @notice CredibleCommitmentCurationProvider contract
+ */
+contract CCCP is
+    ICCCP,
     Initializable,
+    CCCPConfigStorage,
+    CCCPOperatorStatesStorage,
     AccessControlEnumerableUpgradeable,
     PausableUpgradeable
 {
-    using DS for uint256;
-
     struct LidoOperatorCache {
         uint24 moduleId;
         address moduleAddress;
@@ -52,27 +51,24 @@ contract CredibleCommitmentCurationProvider is
     bytes32 public constant RESUME_ROLE = keccak256("RESUME_ROLE");
 
     ILidoLocator public immutable LIDO_LOCATOR;
-    // hardcoded CSModule type, used for the operator's state retrieval
+    // CSModule type, used for the operator's state retrieval
     bytes32 internal immutable CS_MODULE_TYPE;
 
     event OptInSucceeded(uint256 indexed moduleId, uint256 indexed operatorId, address manager);
     event OptOutRequested(uint256 indexed moduleId, uint256 indexed operatorId, bool isForced);
-    event KeyRangeUpdated(
-        uint256 indexed moduleId, uint256 indexed operatorId, uint256 keysRangeStart, uint256 keysRangeEnd
-    );
+    event ResetForcedOptOut(uint256 indexed moduleId, uint256 indexed operatorId);
+
+    event KeysRangeUpdated(uint256 indexed moduleId, uint256 indexed operatorId, uint256 indexStart, uint256 indexEnd);
+    event OperatorManagerUpdated(uint256 indexed moduleId, uint256 indexed operatorId, address manager);
     event RPCUrlUpdated(uint256 indexed moduleId, uint256 indexed operatorId, string rpcURL);
-    event ModuleStateUpdated(uint256 indexed moduleId, bool isDisabled, uint256 operatorMaxValidators);
     event ConfigUpdated(
         uint256 optInMinDurationBlocks,
         uint256 optOutDelayDurationBlocks,
         uint256 defaultOperatorMaxValidators,
         uint256 defaultBlockGasLimit
     );
-    event ResetForcedOptOut(uint256 indexed moduleId, uint256 indexed operatorId);
-    event OperatorManagerUpdated(uint256 indexed moduleId, uint256 indexed operatorId, address manager);
+    event ModuleConfigUpdated(uint256 indexed moduleId, uint256 operatorMaxValidators, bool isDisabled);
 
-    error OperatorNotRegistered();
-    error ManagerNotRegistered();
     error RewardAddressMismatch();
     error OperatorNotActive();
     error ModuleDisabled();
@@ -87,13 +83,10 @@ contract CredibleCommitmentCurationProvider is
     error ZeroCommitteeAddress();
     error ZeroOperatorManagerAddress();
     error ZeroLocatorAddress();
-    error ZeroDefaultOperatorMaxValidators();
-    error ZeroDefaultBlockGasLimit();
 
     constructor(address lidoLocator, bytes32 csModuleType) {
         if (lidoLocator == address(0)) revert ZeroLocatorAddress();
         LIDO_LOCATOR = ILidoLocator(lidoLocator);
-
         CS_MODULE_TYPE = csModuleType;
 
         _disableInitializers();
@@ -116,7 +109,7 @@ contract CredibleCommitmentCurationProvider is
         _grantRole(PAUSE_ROLE, committeeAddress);
         _grantRole(RESUME_ROLE, committeeAddress);
 
-        _setConfig(
+        _updateConfig(
             optInMinDurationBlocks, optOutDelayDurationBlocks, defaultOperatorMaxValidators, defaultBlockGasLimit
         );
     }
@@ -158,10 +151,10 @@ contract CredibleCommitmentCurationProvider is
             revert OperatorNotActive();
         }
 
-        uint256 opKey = DS.__encOpKey(moduleId, operatorId);
+        uint256 opKey = __encOpKey(moduleId, operatorId);
 
         // check if the operator is already has the state
-        OperatorOptInOutState memory optInOutState = opKey._getOperatorOptInOutState();
+        OptInOutState memory optInOutState = _getOperatorOptInOutState(opKey);
         OperatorOptInOutFlags memory flags = _calcOptInOutFlags(optInOutState);
         if (flags.isOptedIn) {
             revert OperatorAlreadyRegistered();
@@ -171,16 +164,16 @@ contract CredibleCommitmentCurationProvider is
 
         // save operator state
         /// @dev also checks if the proposed manager is already registered for different operator
-        opKey._setOperatorManager(manager);
+        _setOperatorManager(opKey, manager);
         emit OperatorManagerUpdated(moduleId, operatorId, manager);
 
-        opKey._setOperatorOptInOutState(
-            OperatorOptInOutState({optInBlock: uint64(block.number), optOutBlock: 0, isOptOutForced: false})
+        _setOperatorOptInOutState(
+            opKey, OptInOutState({optInBlock: uint64(block.number), optOutBlock: 0, isOptOutForced: false})
         );
         _checkAndUpdateKeysRange(_c, opKey, newKeyIndexRangeStart, newKeyIndexRangeEnd);
 
         /// @dev no checks on rpcUrl, so it can be rewritten on repeated opt-in
-        opKey._setOperatorExtraData(OperatorExtraData({rpcURL: rpcURL}));
+        _setOperatorExtraData(opKey, ExtraData({rpcURL: rpcURL}));
         emit RPCUrlUpdated(moduleId, operatorId, rpcURL);
 
         emit OptInSucceeded(moduleId, operatorId, manager);
@@ -190,7 +183,7 @@ contract CredibleCommitmentCurationProvider is
     /// @dev should be called by the operator manager address
     function optOut() external whenNotPaused {
         uint256 opKey = _getOpKeyByManager(msg.sender);
-        OperatorOptInOutState memory optInOutState = opKey._getOperatorOptInOutState();
+        OptInOutState memory optInOutState = _getOperatorOptInOutState(opKey);
         OperatorOptInOutFlags memory flags = _calcOptInOutFlags(optInOutState);
         if (!flags.isOptedIn) {
             revert OperatorNotActive();
@@ -199,9 +192,9 @@ contract CredibleCommitmentCurationProvider is
         }
 
         optInOutState.optOutBlock = uint64(block.number);
-        opKey._setOperatorOptInOutState(optInOutState);
+        _setOperatorOptInOutState(opKey, optInOutState);
 
-        (uint24 moduleId, uint64 operatorId) = opKey.__decOpKey();
+        (uint24 moduleId, uint64 operatorId) = __decOpKey(opKey);
         emit OptOutRequested(moduleId, operatorId, false);
     }
 
@@ -209,7 +202,7 @@ contract CredibleCommitmentCurationProvider is
     function optOut(uint24 moduleId, uint64 operatorId) external onlyRole(COMMITTEE_ROLE) {
         uint256 opKey = _getOpKeyById(moduleId, operatorId);
 
-        OperatorOptInOutState memory optInOutState = opKey._getOperatorOptInOutState();
+        OptInOutState memory optInOutState = _getOperatorOptInOutState(opKey);
         OperatorOptInOutFlags memory flags = _calcOptInOutFlags(optInOutState);
         if (!flags.isOptedIn) {
             revert OperatorNotActive();
@@ -218,7 +211,7 @@ contract CredibleCommitmentCurationProvider is
 
         optInOutState.optOutBlock = uint64(block.number);
         optInOutState.isOptOutForced = true;
-        opKey._setOperatorOptInOutState(optInOutState);
+        _setOperatorOptInOutState(opKey, optInOutState);
 
         emit OptOutRequested(moduleId, operatorId, true);
     }
@@ -227,20 +220,21 @@ contract CredibleCommitmentCurationProvider is
     /// @dev should be called by the operator manager address
     function updateKeysRange(uint64 newKeyIndexRangeStart, uint64 newKeyIndexRangeEnd) external whenNotPaused {
         uint256 opKey = _getOpKeyByManager(msg.sender);
-        OperatorOptInOutFlags memory flags = _calcOptInOutFlags(opKey._getOperatorOptInOutState());
+        OperatorOptInOutFlags memory flags = _calcOptInOutFlags(_getOperatorOptInOutState(opKey));
         if (!flags.isOptedIn) {
             revert OperatorNotActive();
         }
 
-        OperatorKeysRangeState memory keysRangeState = opKey._getOperatorKeysRangeState();
+        KeysRange memory keysRange = _getOperatorKeysRange(opKey);
         if (
-            newKeyIndexRangeStart > keysRangeState.indexStart || newKeyIndexRangeEnd < keysRangeState.indexEnd
-                || (newKeyIndexRangeStart == keysRangeState.indexStart && newKeyIndexRangeEnd == keysRangeState.indexEnd)
+            newKeyIndexRangeStart > keysRange.indexStart || newKeyIndexRangeEnd < keysRange.indexEnd
+                || (newKeyIndexRangeStart == keysRange.indexStart && newKeyIndexRangeEnd == keysRange.indexEnd)
         ) {
             revert KeyIndexMismatch();
         }
         LidoOperatorCache memory _c;
-        _loadLidoNodeOperator(_c, opKey);
+        (uint24 moduleId, uint64 operatorId) = __decOpKey(opKey);
+        _loadLidoNodeOperator(_c, moduleId, operatorId);
         _checkAndUpdateKeysRange(_c, opKey, newKeyIndexRangeStart, newKeyIndexRangeEnd);
     }
 
@@ -258,11 +252,8 @@ contract CredibleCommitmentCurationProvider is
             revert RewardAddressMismatch();
         }
 
-        uint256 opKey = _getOpKeyById(moduleId, operatorId);
-
         /// @dev also checks if the proposed manager is already registered for different operator
-        opKey._setOperatorManager(newManager);
-
+        _setOperatorManager(__encOpKey(moduleId, operatorId), newManager);
         emit OperatorManagerUpdated(moduleId, operatorId, newManager);
     }
 
@@ -294,13 +285,7 @@ contract CredibleCommitmentCurationProvider is
             uint64 defaultBlockGasLimit
         )
     {
-        Config memory cfg = DS._getConfig();
-        return (
-            cfg.optInMinDurationBlocks,
-            cfg.optOutDelayDurationBlocks,
-            cfg.defaultOperatorMaxValidators,
-            cfg.defaultBlockGasLimit
-        );
+        return _getConfig();
     }
 
     function getContractVersion() external view returns (uint64) {
@@ -309,10 +294,10 @@ contract CredibleCommitmentCurationProvider is
 
     function resetForcedOptOut(uint24 moduleId, uint64 operatorId) external onlyRole(COMMITTEE_ROLE) {
         uint256 opKey = _getOpKeyById(moduleId, operatorId);
-        OperatorOptInOutState memory optInOutState = opKey._getOperatorOptInOutState();
+        OptInOutState memory optInOutState = _getOperatorOptInOutState(opKey);
         if (optInOutState.isOptOutForced) {
             optInOutState.isOptOutForced = false;
-            opKey._setOperatorOptInOutState(optInOutState);
+            _setOperatorOptInOutState(opKey, optInOutState);
         }
         emit ResetForcedOptOut(moduleId, operatorId);
     }
@@ -325,13 +310,13 @@ contract CredibleCommitmentCurationProvider is
         uint64 defaultOperatorMaxValidators,
         uint64 defaultBlockGasLimit
     ) external onlyRole(COMMITTEE_ROLE) {
-        _setConfig(
+        _updateConfig(
             optInMinDurationBlocks, optOutDelayDurationBlocks, defaultOperatorMaxValidators, defaultBlockGasLimit
         );
     }
 
     /// @notice Update Disable/enable state and operator's max validators for the module
-    function setModuleState(uint24 moduleId, bool isDisabled, uint64 operatorMaxValidators)
+    function setModuleConfig(uint24 moduleId, bool isDisabled, uint64 operatorMaxValidators)
         external
         onlyRole(COMMITTEE_ROLE)
     {
@@ -339,35 +324,18 @@ contract CredibleCommitmentCurationProvider is
         LidoOperatorCache memory _c;
         _loadLidoModuleData(_c, moduleId);
 
-        ModuleState memory state = DS._getModuleState(moduleId);
-        /// @dev operators in disabled modules are automatically considered as opted-out
-        state.isDisabled = isDisabled;
-        /// @dev zero value means use default config
-        state.maxValidators = operatorMaxValidators;
-        DS._setModuleState(moduleId, state);
-
-        emit ModuleStateUpdated(moduleId, isDisabled, operatorMaxValidators);
+        _setModuleConfig(moduleId, operatorMaxValidators, isDisabled);
+        emit ModuleConfigUpdated(moduleId, operatorMaxValidators, isDisabled);
     }
 
-    function _setConfig(
+    function _updateConfig(
         uint64 optInMinDurationBlocks,
         uint64 optOutDelayDurationBlocks,
         uint64 defaultOperatorMaxValidators,
         uint64 defaultBlockGasLimit
     ) internal {
-        if (defaultOperatorMaxValidators == 0) {
-            revert ZeroDefaultOperatorMaxValidators();
-        }
-        if (defaultBlockGasLimit == 0) {
-            revert ZeroDefaultBlockGasLimit();
-        }
-        DS._setConfig(
-            Config({
-                optInMinDurationBlocks: optInMinDurationBlocks,
-                optOutDelayDurationBlocks: optOutDelayDurationBlocks,
-                defaultOperatorMaxValidators: defaultOperatorMaxValidators,
-                defaultBlockGasLimit: defaultBlockGasLimit
-            })
+        _setConfig(
+            optInMinDurationBlocks, optOutDelayDurationBlocks, defaultOperatorMaxValidators, defaultBlockGasLimit
         );
         emit ConfigUpdated(
             optInMinDurationBlocks, optOutDelayDurationBlocks, defaultOperatorMaxValidators, defaultBlockGasLimit
@@ -384,11 +352,8 @@ contract CredibleCommitmentCurationProvider is
         _checkModuleParams(_c.moduleId, newKeyIndexRangeStart, newKeyIndexRangeEnd);
 
         // save operator state
-        opKey._setOperatorKeysRangeState(
-            OperatorKeysRangeState({indexStart: newKeyIndexRangeStart, indexEnd: newKeyIndexRangeEnd})
-        );
-
-        emit KeyRangeUpdated(_c.moduleId, _c.operatorId, newKeyIndexRangeStart, newKeyIndexRangeEnd);
+        _setOperatorKeysRange(opKey, newKeyIndexRangeStart, newKeyIndexRangeEnd);
+        emit KeysRangeUpdated(_c.moduleId, _c.operatorId, newKeyIndexRangeStart, newKeyIndexRangeEnd);
     }
 
     function _getOperator(uint256 opKey)
@@ -408,18 +373,18 @@ contract CredibleCommitmentCurationProvider is
         )
     {
         LidoOperatorCache memory _c;
-
-        _loadLidoNodeOperator(_c, opKey);
-        state = opKey._getOperatorState();
+        (moduleId, operatorId) = __decOpKey(opKey);
+        _loadLidoNodeOperator(_c, moduleId, operatorId);
+        state = _getOperatorState(opKey);
         OperatorOptInOutFlags memory flags = _calcOptInOutFlags(state.optInOutState);
-        ModuleState memory moduleState = DS._getModuleState(_c.moduleId);
+        (, bool isDisabled) = _getModuleConfig(_c.moduleId);
 
         // operator is enabled:
         // - if it's s opted in
         // - if module not disabled
         // - if operator is active in Lido module
         // - if the contract is not paused
-        isEnabled = flags.isOptedIn && !moduleState.isDisabled && _c.isActive && !paused();
+        isEnabled = flags.isOptedIn && !isDisabled && _c.isActive && !paused();
 
         return (
             _c.moduleId,
@@ -428,39 +393,24 @@ contract CredibleCommitmentCurationProvider is
             // state.optInOutState.optInBlock,
             // state.optInOutState.optOutBlock,
             // state.optInOutState.isOptOutForced,
-            // state.keysRangeState.indexStart,
-            // state.keysRangeState.indexEnd,
+            // state.keysRange.indexStart,
+            // state.keysRange.indexEnd,
             // state.extraData.rpcURL
             state
         );
     }
 
     function _checkModuleParams(uint24 moduleId, uint64 startIndex, uint64 endIndex) internal view {
-        Config memory cfg = DS._getConfig();
-        ModuleState memory state = DS._getModuleState(moduleId);
-        if (state.isDisabled) {
+        (,, uint64 defaultOperatorMaxValidators,) = _getConfig();
+        (uint64 moduleMaxValidators, bool isDisabled) = _getModuleConfig(moduleId);
+        if (isDisabled) {
             revert ModuleDisabled();
         }
         uint64 totalKeys = endIndex - startIndex + 1;
-        uint64 maxValidators = state.maxValidators == 0 ? cfg.defaultOperatorMaxValidators : state.maxValidators;
+        uint64 maxValidators = moduleMaxValidators == 0 ? defaultOperatorMaxValidators : moduleMaxValidators;
 
         if (totalKeys > maxValidators) {
             revert KeysRangeExceedMaxValidators();
-        }
-    }
-
-    /// @dev reverts if the operator not registered
-    function _getOpKeyById(uint24 moduleId, uint64 operatorId) internal view returns (uint256 opKey) {
-        opKey = DS.__encOpKey(moduleId, operatorId);
-        if (opKey._getOperatorManager() == address(0)) {
-            revert OperatorNotRegistered();
-        }
-    }
-
-    function _getOpKeyByManager(address manager) internal view returns (uint256 opKey) {
-        opKey = DS._getManagerOpKey(manager);
-        if (opKey == 0) {
-            revert ManagerNotRegistered();
         }
     }
 
@@ -474,19 +424,19 @@ contract CredibleCommitmentCurationProvider is
         }
     }
 
-    function _calcOptInOutFlags(OperatorOptInOutState memory optInOutState)
+    function _calcOptInOutFlags(OptInOutState memory optInOutState)
         internal
         view
         returns (OperatorOptInOutFlags memory flags)
     {
         uint64 blockNumber = uint64(block.number);
-        Config memory cfg = DS._getConfig();
+        (uint64 optInMinDurationBlocks, uint64 optOutDelayDurationBlocks,,) = _getConfig();
 
         bool isOptedOut =
-            optInOutState.optOutBlock > 0 && optInOutState.optOutBlock + cfg.optOutDelayDurationBlocks < blockNumber;
+            optInOutState.optOutBlock > 0 && optInOutState.optOutBlock + optOutDelayDurationBlocks < blockNumber;
         bool isOptedIn = optInOutState.optInBlock > 0 && !isOptedOut;
         bool optInAllowed = !isOptedIn && !optInOutState.isOptOutForced;
-        bool optOutAllowed = isOptedIn && optInOutState.optInBlock + cfg.optInMinDurationBlocks < blockNumber;
+        bool optOutAllowed = isOptedIn && optInOutState.optInBlock + optInMinDurationBlocks < blockNumber;
 
         return OperatorOptInOutFlags({
             isOptedIn: isOptedIn,
@@ -504,11 +454,6 @@ contract CredibleCommitmentCurationProvider is
     }
 
     /// @notice Prepare the cache for the staking module and node operator
-    function _loadLidoNodeOperator(LidoOperatorCache memory _c, uint256 opKey) internal view {
-        (uint24 moduleId, uint64 operatorId) = opKey.__decOpKey();
-        _loadLidoNodeOperator(_c, moduleId, operatorId);
-    }
-
     function _loadLidoNodeOperator(LidoOperatorCache memory _c, uint24 moduleId, uint64 operatorId) internal view {
         _loadLidoModuleData(_c, moduleId);
         _loadLidoNodeOperatorData(_c, operatorId);
