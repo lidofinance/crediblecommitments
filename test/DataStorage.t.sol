@@ -1,30 +1,21 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity 0.8.28;
 
-import {Test, console} from "forge-std/Test.sol";
-import {CCCPDataStorage as DS, ModuleState, Config} from "../src/lib/CCCPDataStorage.sol";
+import {Test} from "forge-std/Test.sol";
+import {CCCPConfigStorage} from "../src/lib/CCCPConfigStorage.sol";
 
-contract ModulesDataStorageTest is Test {
-    function setUp() public {
-        // counter.setNumber(0);
-    }
+contract ModulesDataStorageTest is Test, CCCPConfigStorage {
+    function setUp() public {}
 
-    function test_StorageLocationConstant() public pure {
-        bytes32 location = keccak256(abi.encode(uint256(keccak256("lido.cccp.CCCPData")) - 1)) & ~bytes32(uint256(0xff));
-
-        assertEq(DS.CCCP_DATA_LOCATION, location);
-    }
-
-    function test_ModuleState() public {
+    function test_ModuleConfig() public {
         uint24 moduleId = 111;
         uint64 maxValidators = 1111;
-        ModuleState memory state = ModuleState({isDisabled: true, maxValidators: maxValidators});
 
-        DS._setModuleState(moduleId, state);
-        ModuleState memory newState = DS._getModuleState(moduleId);
+        _setModuleConfig(moduleId, maxValidators, true);
+        (uint64 newMaxValidators, bool newIsDisabled) = _getModuleConfig(moduleId);
 
-        assertEq(newState.maxValidators, maxValidators);
-        assertEq(newState.isDisabled, true);
+        assertEq(newMaxValidators, maxValidators);
+        assertEq(newIsDisabled, true);
     }
 
     function test_Config() public {
@@ -32,16 +23,20 @@ contract ModulesDataStorageTest is Test {
         uint64 optOutDelayDurationBlocks = 234;
         uint64 defaultOperatorMaxValidators = 100;
         uint64 defaultBlockGasLimit = 1000000;
-        Config memory cfg = Config(
+
+        _setConfig(
             optInMinDurationBlocks, optOutDelayDurationBlocks, defaultOperatorMaxValidators, defaultBlockGasLimit
         );
+        (
+            uint64 newOptInMinDurationBlocks,
+            uint64 newOptOutDelayDurationBlocks,
+            uint64 newDefaultOperatorMaxValidators,
+            uint64 newDefaultBlockGasLimit
+        ) = _getConfig();
 
-        DS._setConfig(cfg);
-        Config memory newCfg = DS._getConfig();
-
-        assertEq(newCfg.optInMinDurationBlocks, optInMinDurationBlocks);
-        assertEq(newCfg.optOutDelayDurationBlocks, optOutDelayDurationBlocks);
-        assertEq(newCfg.defaultOperatorMaxValidators, defaultOperatorMaxValidators);
-        assertEq(newCfg.defaultBlockGasLimit, defaultBlockGasLimit);
+        assertEq(newOptInMinDurationBlocks, optInMinDurationBlocks);
+        assertEq(newOptOutDelayDurationBlocks, optOutDelayDurationBlocks);
+        assertEq(newDefaultOperatorMaxValidators, defaultOperatorMaxValidators);
+        assertEq(newDefaultBlockGasLimit, defaultBlockGasLimit);
     }
 }

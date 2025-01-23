@@ -52,7 +52,6 @@ interface ICCCPOperatorStatesStorage {
         mapping(address => uint256) _managers;
     }
 
-
     error ManagerBelongsToOtherOperator();
     error OperatorNotRegistered();
     error ManagerNotRegistered();
