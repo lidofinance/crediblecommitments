@@ -134,10 +134,9 @@ contract CCCP is
         uint64 newKeyIndexRangeEnd,
         string calldata rpcURL
     ) external whenNotPaused {
-        LidoOperatorCache memory _c;
-
         if (manager == address(0)) revert ZeroOperatorManagerAddress();
 
+        LidoOperatorCache memory _c;
         /// @dev correctness of moduleId and operatorId are checked inside
         _loadLidoNodeOperator(_c, moduleId, operatorId);
 
@@ -363,12 +362,6 @@ contract CCCP is
             uint24 moduleId,
             uint64 operatorId,
             bool isEnabled,
-            // uint64 optInBlock,
-            // uint64 optOutBlock,
-            // bool isOptOutForced, // if the operator is forced to opt out by the committee
-            // uint64 keyIndexRangeStart,
-            // uint64 keyIndexRangeEnd,
-            // string memory rpcURL
             OperatorState memory state
         )
     {
@@ -390,12 +383,6 @@ contract CCCP is
             _c.moduleId,
             _c.operatorId,
             isEnabled,
-            // state.optInOutState.optInBlock,
-            // state.optInOutState.optOutBlock,
-            // state.optInOutState.isOptOutForced,
-            // state.keysRange.indexStart,
-            // state.keysRange.indexEnd,
-            // state.extraData.rpcURL
             state
         );
     }
