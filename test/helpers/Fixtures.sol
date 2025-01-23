@@ -6,7 +6,7 @@ import {StdCheats} from "forge-std/StdCheats.sol";
 import {Test} from "forge-std/Test.sol";
 
 import {DeployParams} from "../../script/DeployBase.s.sol";
-import {CredibleCommitmentCurationProvider} from "../../src/CredibleCommitmentCurationProvider.sol";
+import {CCCP} from "../../src/CCCP.sol";
 
 import {ILidoLocator} from "../../src/interfaces/ILidoLocator.sol";
 import {IStakingRouter} from "../../src/interfaces/IStakingRouter.sol";
@@ -57,7 +57,7 @@ contract DeploymentFixtures is StdCheats, Test {
         address lidoLocator;
     }
 
-    CredibleCommitmentCurationProvider public cccp;
+    CCCP public cccp;
     ILidoLocator public locator;
     IStakingRouter public stakingRouter;
 
@@ -73,7 +73,7 @@ contract DeploymentFixtures is StdCheats, Test {
         DeploymentConfig memory deploymentConfig = parseDeploymentConfig(config);
         assertEq(deploymentConfig.chainId, block.chainid, "ChainId mismatch");
 
-        cccp = CredibleCommitmentCurationProvider(deploymentConfig.cccp);
+        cccp = CCCP(deploymentConfig.cccp);
         locator = ILidoLocator(deploymentConfig.lidoLocator);
         stakingRouter = IStakingRouter(locator.stakingRouter());
     }

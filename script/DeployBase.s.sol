@@ -5,7 +5,7 @@ pragma solidity 0.8.28;
 
 import {Script} from "forge-std/Script.sol";
 import {OssifiableProxy} from "../src/lib/proxy/OssifiableProxy.sol";
-import {CredibleCommitmentCurationProvider} from "../src/CredibleCommitmentCurationProvider.sol";
+import {CCCP} from "../src/CCCP.sol";
 
 import {JsonObj, Json} from "./utils/Json.sol";
 
@@ -28,7 +28,7 @@ abstract contract DeployBase is Script {
 
     address internal deployer;
     uint256 internal pk;
-    CredibleCommitmentCurationProvider public cccp;
+    CCCP public cccp;
 
     error ChainIdMismatch(uint256 actual, uint256 expected);
 
@@ -51,15 +51,14 @@ abstract contract DeployBase is Script {
 
         vm.startBroadcast(pk);
         {
-            address cccpImpl =
-                address(new CredibleCommitmentCurationProvider(config.lidoLocatorAddress, config.csModuleType));
+            address cccpImpl = address(new CCCP(config.lidoLocatorAddress, config.csModuleType));
 
-            cccp = CredibleCommitmentCurationProvider(
+            cccp = CCCP(
                 _deployProxy(
                     config.proxyAdmin,
                     address(cccpImpl),
                     abi.encodeCall(
-                        CredibleCommitmentCurationProvider.initialize,
+                        CCCP.initialize,
                         (
                             config.committeeAddress,
                             config.optInMinDurationBlocks,

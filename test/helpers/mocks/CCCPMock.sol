@@ -3,12 +3,10 @@
 
 pragma solidity 0.8.28;
 
-import {CredibleCommitmentCurationProvider} from "../../../src/CredibleCommitmentCurationProvider.sol";
+import {CCCP} from "../../../src/CCCP.sol";
 
-contract CCCPMock is CredibleCommitmentCurationProvider {
-    constructor(address lidoLocator, bytes32 csModuleType)
-        CredibleCommitmentCurationProvider(lidoLocator, csModuleType)
-    {}
+contract CCCPMock is CCCP {
+    constructor(address lidoLocator, bytes32 csModuleType) CCCP(lidoLocator, csModuleType) {}
 
     function __test__getCSModuleType() external view returns (bytes32) {
         return CS_MODULE_TYPE;

@@ -8,7 +8,7 @@ import {Utilities} from "../../helpers/Utilities.sol";
 import {DeploymentFixtures} from "../../helpers/Fixtures.sol";
 import {DeployParams} from "../../../script/DeployBase.s.sol";
 import {OssifiableProxy} from "../../../src/lib/proxy/OssifiableProxy.sol";
-import {CredibleCommitmentCurationProvider as CCCP} from "../../../src/CredibleCommitmentCurationProvider.sol";
+import {CCCP} from "../../../src/CCCP.sol";
 import {Initializable} from "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 
 contract CSModuleDeploymentTest is Test, Utilities, DeploymentFixtures {

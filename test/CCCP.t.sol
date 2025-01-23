@@ -2,18 +2,16 @@
 pragma solidity 0.8.28;
 
 import {Test, console} from "forge-std/Test.sol";
-import {CCCPDataStorage as DS, ModuleState, Config} from "../src/lib/CCCPDataStorage.sol";
-import {
-    CredibleCommitmentCurationProvider as CCCP, OperatorState
-} from "../src/CredibleCommitmentCurationProvider.sol";
+import {CCCPConfigStorage, ICCCPConfigStorage} from "../src/lib/CCCPConfigStorage.sol";
+import {CCCPOperatorStatesStorage, ICCCPOperatorStatesStorage} from "../src/lib/CCCPOperatorStatesStorage.sol";
+import {CCCP} from "../src/CCCP.sol";
 import {CCCPMock} from "./helpers/mocks/CCCPMock.sol";
 import {Initializable} from "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
-
-import "./helpers/Fixtures.sol";
-import "./helpers/Utilities.sol";
+import {Fixtures} from "./helpers/Fixtures.sol";
+import {Utilities} from "./helpers/Utilities.sol";
 import {LidoLocatorMock} from "test/helpers/mocks/LidoLocatorMock.sol";
 import {StakingModuleMock} from "test/helpers/mocks/StakingModuleMock.sol";
-import {StakingRouterMock} from "test/helpers/mocks/StakingRouterMock.sol";
+import {StakingRouterMock, IStakingRouter} from "test/helpers/mocks/StakingRouterMock.sol";
 import {CuratedModuleMock} from "test/helpers/mocks/CuratedModuleMock.sol";
 import {CSModuleMock} from "test/helpers/mocks/CSModuleMock.sol";
 
@@ -154,7 +152,7 @@ contract CCCPOptIn is CCCPCommon {
         // opt in on behalf of noCsm1
         vm.broadcast(noCsm1);
         vm.expectEmit(true, true, true, false, address(cccp));
-        emit CCCP.KeyRangeUpdated(csmId, noCsm1Id, 2, 4);
+        emit CCCP.KeysRangeUpdated(csmId, noCsm1Id, 2, 4);
         vm.expectEmit(true, true, true, false, address(cccp));
         emit CCCP.OptInSucceeded(csmId, noCsm1Id, noCsm1Manager);
 
@@ -167,15 +165,15 @@ contract CCCPOptIn is CCCPCommon {
             rpcURL: ""
         });
 
-        (uint24 moduleId, uint64 operatorId, bool isEnabled, OperatorState memory state) =
+        (uint24 moduleId, uint64 operatorId, bool isEnabled, CCCP.OperatorState memory state) =
             cccp.getOperator(noCsm1Manager);
 
         assertEq(moduleId, csmId);
         assertEq(operatorId, noCsm1Id);
         assertEq(isEnabled, true);
 
-        assertEq(state.keysRangeState.indexStart, 2);
-        assertEq(state.keysRangeState.indexEnd, 4);
+        assertEq(state.keysRange.indexStart, 2);
+        assertEq(state.keysRange.indexEnd, 4);
         assertEq(state.manager, noCsm1Manager);
         assertEq(state.optInOutState.optInBlock, block.number);
         assertEq(state.optInOutState.optOutBlock, 0);
@@ -307,7 +305,7 @@ contract CCCPOptIn is CCCPCommon {
 
         // optin with same manager
         vm.broadcast(noCsm1);
-        vm.expectRevert(DS.ManagerBelongsToOtherOperator.selector);
+        vm.expectRevert(ICCCPOperatorStatesStorage.ManagerBelongsToOtherOperator.selector);
         cccp.optIn({
             moduleId: csmId,
             operatorId: noCsm1Id,
