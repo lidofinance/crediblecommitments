@@ -358,12 +358,7 @@ contract CCCP is
     function _getOperator(uint256 opKey)
         internal
         view
-        returns (
-            uint24 moduleId,
-            uint64 operatorId,
-            bool isEnabled,
-            OperatorState memory state
-        )
+        returns (uint24 moduleId, uint64 operatorId, bool isEnabled, OperatorState memory state)
     {
         LidoOperatorCache memory _c;
         (moduleId, operatorId) = __decOpKey(opKey);
@@ -379,12 +374,7 @@ contract CCCP is
         // - if the contract is not paused
         isEnabled = flags.isOptedIn && !isDisabled && _c.isActive && !paused();
 
-        return (
-            _c.moduleId,
-            _c.operatorId,
-            isEnabled,
-            state
-        );
+        return (_c.moduleId, _c.operatorId, isEnabled, state);
     }
 
     function _checkModuleParams(uint24 moduleId, uint64 startIndex, uint64 endIndex) internal view {
