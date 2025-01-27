@@ -22,7 +22,7 @@ interface ICCCPConfigStorage {
         uint64 optInMinDurationBlocks;
         // delay in blocks before the operator can opt-in again after opt-out
         uint64 optOutDelayDurationBlocks;
-        uint64 defaultOperatorMaxValidators; //todo rename to per op
+        uint64 defaultOperatorMaxValidators;
         uint64 defaultBlockGasLimit;
     }
 

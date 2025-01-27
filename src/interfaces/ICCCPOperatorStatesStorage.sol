@@ -12,10 +12,10 @@ interface ICCCPOperatorStatesStorage {
     /// operator can be in several statuses:
     // 1. new, not registered: optInBlock = 0, optOutBlock = 0
     // 2. registered: optInBlock > 0, optOutBlock = 0
-    // 3. opt-out in progress: optInBlock > 0, optOutBlock > 0, optOutBlock + optOutDelayDurationBlocksDelay >= block.r
-    // 4. forded opt-out in progress: optInBlock > 0, optOutBlock > 0, isOptOutForced = true, optOutBlock + optOutDelayDurationBlocksDelay >= block.r
-    // 5. opt-out completed: optInBlock > 0, optOutBlock > 0, isOptOutForced = false, optOutBlock + optOutDelayDurationBlocksDelay < block.r
-    // 6. forced opt-out completed: optInBlock > 0, optOutBlock > 0, isOptOutForced = true, optOutBlock + optOutDelayDurationBlocksDelay < block.r
+    // 3. opt-out in progress: optInBlock > 0, optOutBlock > 0, optOutBlock + optOutDelayDurationBlocksDelay >= block.number
+    // 4. forded opt-out in progress: optInBlock > 0, optOutBlock > 0, isOptOutForced = true, optOutBlock + optOutDelayDurationBlocksDelay >= block.number
+    // 5. opt-out completed: optInBlock > 0, optOutBlock > 0, isOptOutForced = false, optOutBlock + optOutDelayDurationBlocksDelay < block.number
+    // 6. forced opt-out completed: optInBlock > 0, optOutBlock > 0, isOptOutForced = true, optOutBlock + optOutDelayDurationBlocksDelay < block.number
 
     // If isOptOutForced is set, optOutBlock has non-zero value of the block number when the operator was forced to opt out.
     // If operator has "forced opt-out completed" status, it can't opt in again until the committee decides to allow it (clear isOptOutForced flag).

@@ -112,6 +112,8 @@ contract CCCP is
         _updateConfig(
             optInMinDurationBlocks, optOutDelayDurationBlocks, defaultOperatorMaxValidators, defaultBlockGasLimit
         );
+
+        ///todo: pass module Ids to disable them at the start
     }
 
     /// @notice Resume all operations after a pause
