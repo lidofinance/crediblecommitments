@@ -367,7 +367,7 @@ contract CCCP is
         _loadLidoNodeOperator(_c, moduleId, operatorId);
         state = _getOperatorState(opKey);
         OperatorOptInOutFlags memory flags = _calcOptInOutFlags(state.optInOutState);
-        (, bool isDisabled) = _getModuleConfig(_c.moduleId);
+        (, bool isDisabled) = _getModuleConfig(moduleId);
 
         // operator is enabled:
         // - if it's s opted in
@@ -376,7 +376,7 @@ contract CCCP is
         // - if the contract is not paused
         isEnabled = flags.isOptedIn && !isDisabled && _c.isActive && !paused();
 
-        return (_c.moduleId, _c.operatorId, isEnabled, state);
+        return (moduleId, operatorId, isEnabled, state);
     }
 
     function _checkModuleParams(uint24 moduleId, uint64 startIndex, uint64 endIndex) internal view {
@@ -456,6 +456,7 @@ contract CCCP is
         if (operatorId >= totalOperatorsCount) {
             revert InvalidOperatorId();
         }
+        _c.operatorId = operatorId;
 
         /// @dev check for the CSModule type
         bytes32 moduleType = IStakingModule(_c.moduleAddress).getType();
