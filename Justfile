@@ -9,7 +9,16 @@ deploy_script_name := if chain == "mainnet" {
     error("Unsupported chain " + chain)
 }
 
+upgrade_script_name := if chain == "mainnet" {
+    "UpgradeMainnet"
+} else if chain == "holesky" {
+    "UpgradeHolesky"
+} else {
+    error("Unsupported chain " + chain)
+}
+
 deploy_script_path := "script" / deploy_script_name + ".s.sol:" + deploy_script_name
+upgrade_script_path := "script" / upgrade_script_name + ".s.sol:" + upgrade_script_name
 
 anvil_host := env_var_or_default("ANVIL_IP_ADDR", "127.0.0.1")
 anvil_port := "8545"
@@ -104,6 +113,7 @@ make-fork *args:
 kill-fork:
     @-pkill anvil && just _warn "anvil process is killed"
 
+# deploy production
 deploy *args:
     forge script {{deploy_script_path}} --rpc-url {{anvil_rpc_url}} --broadcast --slow {{args}}
 
@@ -128,10 +138,38 @@ verify-prod *args:
 _deploy-prod *args:
     forge script {{deploy_script_path}} --force --rpc-url ${RPC_URL} {{args}}
 
+# upgrade production
+upgrade *args:
+    forge script {{upgrade_script_path}} --rpc-url {{anvil_rpc_url}} --broadcast --slow {{args}}
+
+upgrade-prod *args:
+    just _warn "The current `tput bold`chain={{chain}}`tput sgr0` with the following rpc url: $RPC_URL"
+    ARTIFACTS_DIR=./artifacts/latest/ just _upgrade-prod-confirm {{args}}
+
+    cp ./broadcast/{{upgrade_script_path}}.s.sol/`cast chain-id --rpc-url=$RPC_URL`/run-latest.json \
+        ./artifacts/latest/transactions.json
+
+[confirm("You are about to broadcast upgrade transactions to the network. Are you sure?")]
+_upgrade-prod-confirm *args:
+    just _upgrade-prod --broadcast --verify {{args}}
+
+upgrade-prod-dry *args:
+    just _upgrade-prod {{args}}
+
+_upgrade-prod *args:
+    forge script {{upgrade_script_path}} --force --rpc-url ${RPC_URL} {{args}}
+
+# local deployment
 deploy-local:
     just make-fork &
     @while ! echo exit | nc {{anvil_host}} {{anvil_port}} > /dev/null; do sleep 1; done
     ARTIFACTS_DIR=./artifacts/local/ just deploy
+    just _warn "anvil is kept running in the background: {{anvil_rpc_url}}"
+
+upgrade-local:
+    just make-fork &
+    @while ! echo exit | nc {{anvil_host}} {{anvil_port}} > /dev/null; do sleep 1; done
+    ARTIFACTS_DIR=./artifacts/local/ just upgrade
     just _warn "anvil is kept running in the background: {{anvil_rpc_url}}"
 
 test-local *args:
