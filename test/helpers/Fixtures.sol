@@ -5,7 +5,7 @@ pragma solidity 0.8.28;
 import {StdCheats} from "forge-std/StdCheats.sol";
 import {Test} from "forge-std/Test.sol";
 
-import {DeployParams} from "../../script/DeployBase.s.sol";
+import {DeployParams} from "../../script/DeployBase.sol";
 import {CCCP} from "../../src/CCCP.sol";
 
 import {ILidoLocator} from "../../src/interfaces/ILidoLocator.sol";
