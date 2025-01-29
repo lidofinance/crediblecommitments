@@ -146,7 +146,7 @@ upgrade-prod *args:
     just _warn "The current `tput bold`chain={{chain}}`tput sgr0` with the following rpc url: $RPC_URL"
     ARTIFACTS_DIR=./artifacts/latest/ just _upgrade-prod-confirm {{args}}
 
-    cp ./broadcast/{{upgrade_script_path}}.s.sol/`cast chain-id --rpc-url=$RPC_URL`/run-latest.json \
+    cp ./broadcast/{{upgrade_script_name}}.s.sol/`cast chain-id --rpc-url=$RPC_URL`/run-latest.json \
         ./artifacts/latest/transactions.json
 
 [confirm("You are about to broadcast upgrade transactions to the network. Are you sure?")]
