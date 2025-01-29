@@ -14,12 +14,12 @@ interface ICCCP is ICCCPOperatorStatesStorage {
         uint24 moduleId,
         uint64 operatorId,
         address manager,
-        uint64 newKeyIndexRangeStart,
-        uint64 newKeyIndexRangeEnd,
+        uint64 keyIndexStart,
+        uint64 keyIndexEnd,
         string calldata rpcURL
     ) external;
     function optOut() external;
-    function updateKeysRange(uint64 newKeyIndexRangeStart, uint64 newKeyIndexRangeEnd) external;
+    function updateKeysRange(uint64 keyIndexStart, uint64 keyIndexEnd) external;
     function updateManager(uint24 moduleId, uint64 operatorId, address newManager) external;
 
     function getOperator(address manager)
@@ -31,4 +31,9 @@ interface ICCCP is ICCCPOperatorStatesStorage {
         external
         view
         returns (uint24 moduleId, uint64 operatorId, bool isEnabled, OperatorState memory state);
+    function getModuleBlockGasLimit(uint24 moduleId) external view returns (uint64);
+    function getModuleOperatorMaxValidators(uint24 moduleId) external view returns (uint64);
+    function getOperatorManager(uint24 moduleId, uint64 operatorId) external view returns (address);
+    function getOperatorIsEnabledForPreconf(uint24 moduleId, uint64 operatorId) external view returns (bool);
+    function getOperatorAllowedValidators(uint24 moduleId, uint64 operatorId) external view returns (uint64);
 }

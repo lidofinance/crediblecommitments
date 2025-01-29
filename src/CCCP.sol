@@ -67,7 +67,9 @@ contract CCCP is
         uint256 defaultOperatorMaxValidators,
         uint256 defaultBlockGasLimit
     );
-    event ModuleConfigUpdated(uint256 indexed moduleId, bool isDisabled, uint256 operatorMaxValidators);
+    event ModuleConfigUpdated(
+        uint256 indexed moduleId, bool isDisabled, uint256 operatorMaxValidators, uint64 blockGasLimit
+    );
 
     error RewardAddressMismatch();
     error OperatorNotActive();
@@ -276,13 +278,57 @@ contract CCCP is
         return _getOperator(opKey);
     }
 
-    function getOperatorIsEnabledForPreconf(uint24 moduleId, uint64 operatorId) internal view returns (bool) {
+    function getOperatorManager(uint24 moduleId, uint64 operatorId) external view returns (address) {
+        uint256 opKey = _getOpKeyById(moduleId, operatorId);
+        return _getOperatorManager(opKey);
+    }
+
+    function getOperatorIsEnabledForPreconf(uint24 moduleId, uint64 operatorId) external view returns (bool) {
         LidoOperatorCache memory _c;
         _loadLidoNodeOperator(_c, moduleId, operatorId);
         uint256 opKey = _getOpKeyById(moduleId, operatorId);
         OptInOutState memory optInOutState = _getOperatorOptInOutState(opKey);
 
         return _isOperatorIsEnabledForPreconf(optInOutState, moduleId, _c.isActive);
+    }
+
+    function getOperatorAllowedValidators(uint24 moduleId, uint64 operatorId)
+        external
+        view
+        returns (uint64 allowedValidators)
+    {
+        // check if the module has max validators limit
+        uint64 maxValidators = getModuleOperatorMaxValidators(moduleId);
+        if (maxValidators == 0) {
+            return 0;
+        }
+        // check if the operator is active in Lido module
+        LidoOperatorCache memory _c;
+        _loadLidoNodeOperator(_c, moduleId, operatorId);
+        if (!_c.isActive) {
+            return 0;
+        }
+        uint256 opKey = _getOpKeyById(moduleId, operatorId);
+        // check if the operator is already has the state
+        if (_getOperatorManager(opKey) == address(0)) {
+            return 0;
+        }
+
+        KeysRange memory keysRange = _getOperatorKeysRange(opKey);
+        uint64 totalKeys = keysRange.indexEnd - keysRange.indexStart + 1;
+        // check if the operator has already reached the max validators limit
+        if (totalKeys >= maxValidators) {
+            return 0;
+        }
+
+        unchecked {
+            allowedValidators = maxValidators - totalKeys;
+        }
+        // check if the operator has enough keys to reach the max validators limit
+        uint64 restKeys = _c.totalKeys - totalKeys;
+        if (restKeys < allowedValidators) {
+            allowedValidators = restKeys;
+        }
     }
 
     function getConfig()
@@ -296,6 +342,26 @@ contract CCCP is
         )
     {
         return _getConfig();
+    }
+
+    function getModuleConfig(uint24 moduleId)
+        external
+        view
+        returns (bool isDisabled, uint64 operatorMaxValidators, uint64 blockGasLimit)
+    {
+        return _getModuleConfig(moduleId);
+    }
+
+    function getModuleBlockGasLimit(uint24 moduleId) external view returns (uint64) {
+        (,,, uint64 defaultBlockGasLimit) = _getConfig();
+        (bool isDisabled,, uint64 blockGasLimit) = _getModuleConfig(moduleId);
+        return isDisabled ? 0 : blockGasLimit == 0 ? defaultBlockGasLimit : blockGasLimit;
+    }
+
+    function getModuleOperatorMaxValidators(uint24 moduleId) public view returns (uint64) {
+        (,, uint64 defaultOperatorMaxValidators,) = _getConfig();
+        (bool isDisabled, uint64 operatorMaxValidators,) = _getModuleConfig(moduleId);
+        return isDisabled ? 0 : operatorMaxValidators == 0 ? defaultOperatorMaxValidators : operatorMaxValidators;
     }
 
     function getContractVersion() external view returns (uint64) {
@@ -326,7 +392,7 @@ contract CCCP is
     }
 
     /// @notice Update Disable/enable state and operator's max validators for the module
-    function setModuleConfig(uint24 moduleId, bool isDisabled, uint64 operatorMaxValidators)
+    function setModuleConfig(uint24 moduleId, bool isDisabled, uint64 operatorMaxValidators, uint64 blockGasLimit)
         external
         onlyRole(COMMITTEE_ROLE)
     {
@@ -334,8 +400,8 @@ contract CCCP is
         LidoOperatorCache memory _c;
         _loadLidoModuleData(_c, moduleId);
 
-        _setModuleConfig(moduleId, isDisabled, operatorMaxValidators);
-        emit ModuleConfigUpdated(moduleId, isDisabled, operatorMaxValidators);
+        _setModuleConfig(moduleId, isDisabled, operatorMaxValidators, blockGasLimit);
+        emit ModuleConfigUpdated(moduleId, isDisabled, operatorMaxValidators, blockGasLimit);
     }
 
     function _updateConfig(
@@ -396,14 +462,11 @@ contract CCCP is
     }
 
     function _checkModuleParams(uint24 moduleId, uint64 startIndex, uint64 endIndex) internal view {
-        (,, uint64 defaultOperatorMaxValidators,) = _getConfig();
-        (bool isDisabled, uint64 operatorMaxValidators) = _getModuleConfig(moduleId);
-        if (isDisabled) {
+        uint64 maxValidators = getModuleOperatorMaxValidators(moduleId);
+        if (maxValidators == 0) {
             revert ModuleDisabled();
         }
         uint64 totalKeys = endIndex - startIndex + 1;
-        uint64 maxValidators = operatorMaxValidators == 0 ? defaultOperatorMaxValidators : operatorMaxValidators;
-
         if (totalKeys > maxValidators) {
             revert KeysRangeExceedMaxValidators();
         }

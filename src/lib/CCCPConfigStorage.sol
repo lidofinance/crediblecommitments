@@ -34,9 +34,14 @@ abstract contract CCCPConfigStorage is ICCCPConfigStorage {
         });
     }
 
-    function _setModuleConfig(uint24 moduleId, bool isDisabled, uint64 operatorMaxValidators) internal {
-        _getConfigStorage()._modules[moduleId] =
-            ModuleConfig({isDisabled: isDisabled, operatorMaxValidators: operatorMaxValidators});
+    function _setModuleConfig(uint24 moduleId, bool isDisabled, uint64 operatorMaxValidators, uint64 blockGasLimit)
+        internal
+    {
+        _getConfigStorage()._modules[moduleId] = ModuleConfig({
+            isDisabled: isDisabled,
+            operatorMaxValidators: operatorMaxValidators,
+            blockGasLimit: blockGasLimit
+        });
     }
 
     function _getConfig()
@@ -58,9 +63,13 @@ abstract contract CCCPConfigStorage is ICCCPConfigStorage {
         );
     }
 
-    function _getModuleConfig(uint24 moduleId) internal view returns (bool isDisabled, uint64 operatorMaxValidators) {
+    function _getModuleConfig(uint24 moduleId)
+        internal
+        view
+        returns (bool isDisabled, uint64 operatorMaxValidators, uint64 blockGasLimit)
+    {
         ModuleConfig memory moduleConfig = _getConfigStorage()._modules[moduleId];
-        return (moduleConfig.isDisabled, moduleConfig.operatorMaxValidators);
+        return (moduleConfig.isDisabled, moduleConfig.operatorMaxValidators, moduleConfig.blockGasLimit);
     }
 
     /**
