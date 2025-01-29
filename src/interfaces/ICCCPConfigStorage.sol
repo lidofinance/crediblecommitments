@@ -8,19 +8,24 @@ pragma solidity 0.8.28;
  * @notice Interface for interacting with the storage and control config params.
  */
 interface ICCCPConfigStorage {
+
+    /// @notice steaking module parameters
+    /// @dev override global default values, zero values means use default config
+    /// @param isDisabled is module disabled for pre-confs
+    ///        operators in disabled modules are automatically considered as opted-out
+    /// @param operatorMaxValidators maximum number of validators per operator
     struct ModuleConfig {
-        // hopefully, we won't need more than 2^64 validators
-        /// @dev zero value means use default config
-        uint64 maxValidators;
-        // is module disabled for pre-confs
-        /// @dev operators in disabled modules are automatically considered as opted-out
         bool isDisabled;
+        uint64 operatorMaxValidators;
     }
 
+    /// @notice global config parameters
+    /// @param optInMinDurationBlocks minimum duration of the opt-in period in blocks
+    /// @param optOutDelayDurationBlocks delay in blocks before the operator can opt-in again after opt-out
+    /// @param defaultOperatorMaxValidators default maximum number of validators per operator
+    /// @param defaultBlockGasLimit default block gas limit
     struct Config {
-        // minimum duration of the opt-in period in blocks
         uint64 optInMinDurationBlocks;
-        // delay in blocks before the operator can opt-in again after opt-out
         uint64 optOutDelayDurationBlocks;
         uint64 defaultOperatorMaxValidators;
         uint64 defaultBlockGasLimit;

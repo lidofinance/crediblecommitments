@@ -67,7 +67,7 @@ contract CCCP is
         uint256 defaultOperatorMaxValidators,
         uint256 defaultBlockGasLimit
     );
-    event ModuleConfigUpdated(uint256 indexed moduleId, uint256 operatorMaxValidators, bool isDisabled);
+    event ModuleConfigUpdated(uint256 indexed moduleId, bool isDisabled, uint256 operatorMaxValidators);
 
     error RewardAddressMismatch();
     error OperatorNotActive();
@@ -132,8 +132,8 @@ contract CCCP is
         uint24 moduleId,
         uint64 operatorId,
         address manager,
-        uint64 newKeyIndexRangeStart,
-        uint64 newKeyIndexRangeEnd,
+        uint64 keyIndexStart,
+        uint64 keyIndexEnd,
         string calldata rpcURL
     ) external whenNotPaused {
         if (manager == address(0)) revert ZeroOperatorManagerAddress();
@@ -171,7 +171,7 @@ contract CCCP is
         _setOperatorOptInOutState(
             opKey, OptInOutState({optInBlock: uint64(block.number), optOutBlock: 0, isOptOutForced: false})
         );
-        _checkAndUpdateKeysRange(_c, opKey, newKeyIndexRangeStart, newKeyIndexRangeEnd);
+        _checkAndUpdateKeysRange(_c, opKey, keyIndexStart, keyIndexEnd);
 
         /// @dev no checks on rpcUrl, so it can be rewritten on repeated opt-in
         _setOperatorExtraData(opKey, ExtraData({rpcURL: rpcURL}));
@@ -219,7 +219,7 @@ contract CCCP is
 
     /// @notice Update the operator's keys range
     /// @dev should be called by the operator manager address
-    function updateKeysRange(uint64 newKeyIndexRangeStart, uint64 newKeyIndexRangeEnd) external whenNotPaused {
+    function updateKeysRange(uint64 keyIndexStart, uint64 keyIndexEnd) external whenNotPaused {
         uint256 opKey = _getOpKeyByManager(msg.sender);
         OperatorOptInOutFlags memory flags = _calcOptInOutFlags(_getOperatorOptInOutState(opKey));
         if (!flags.isOptedIn) {
@@ -228,15 +228,15 @@ contract CCCP is
 
         KeysRange memory keysRange = _getOperatorKeysRange(opKey);
         if (
-            newKeyIndexRangeStart > keysRange.indexStart || newKeyIndexRangeEnd < keysRange.indexEnd
-                || (newKeyIndexRangeStart == keysRange.indexStart && newKeyIndexRangeEnd == keysRange.indexEnd)
+            keyIndexStart > keysRange.indexStart || keyIndexEnd < keysRange.indexEnd
+                || (keyIndexStart == keysRange.indexStart && keyIndexEnd == keysRange.indexEnd)
         ) {
             revert KeyIndexMismatch();
         }
         LidoOperatorCache memory _c;
         (uint24 moduleId, uint64 operatorId) = __decOpKey(opKey);
         _loadLidoNodeOperator(_c, moduleId, operatorId);
-        _checkAndUpdateKeysRange(_c, opKey, newKeyIndexRangeStart, newKeyIndexRangeEnd);
+        _checkAndUpdateKeysRange(_c, opKey, keyIndexStart, keyIndexEnd);
     }
 
     /// @notice Update the operator's manager address
@@ -274,6 +274,15 @@ contract CCCP is
     {
         uint256 opKey = _getOpKeyById(_moduleId, _operatorId);
         return _getOperator(opKey);
+    }
+
+    function getOperatorIsEnabledForPreconf(uint24 moduleId, uint64 operatorId) internal view returns (bool) {
+        LidoOperatorCache memory _c;
+        _loadLidoNodeOperator(_c, moduleId, operatorId);
+        uint256 opKey = _getOpKeyById(moduleId, operatorId);
+        OptInOutState memory optInOutState = _getOperatorOptInOutState(opKey);
+
+        return _isOperatorIsEnabledForPreconf(optInOutState, moduleId, _c.isActive);
     }
 
     function getConfig()
@@ -325,8 +334,8 @@ contract CCCP is
         LidoOperatorCache memory _c;
         _loadLidoModuleData(_c, moduleId);
 
-        _setModuleConfig(moduleId, operatorMaxValidators, isDisabled);
-        emit ModuleConfigUpdated(moduleId, operatorMaxValidators, isDisabled);
+        _setModuleConfig(moduleId, isDisabled, operatorMaxValidators);
+        emit ModuleConfigUpdated(moduleId, isDisabled, operatorMaxValidators);
     }
 
     function _updateConfig(
@@ -346,15 +355,15 @@ contract CCCP is
     function _checkAndUpdateKeysRange(
         LidoOperatorCache memory _c,
         uint256 opKey,
-        uint64 newKeyIndexRangeStart,
-        uint64 newKeyIndexRangeEnd
+        uint64 keyIndexStart,
+        uint64 keyIndexEnd
     ) internal {
-        _checkKeysRangeIsValid(_c.totalKeys, newKeyIndexRangeStart, newKeyIndexRangeEnd);
-        _checkModuleParams(_c.moduleId, newKeyIndexRangeStart, newKeyIndexRangeEnd);
+        _checkKeysRangeIsValid(_c.totalKeys, keyIndexStart, keyIndexEnd);
+        _checkModuleParams(_c.moduleId, keyIndexStart, keyIndexEnd);
 
         // save operator state
-        _setOperatorKeysRange(opKey, newKeyIndexRangeStart, newKeyIndexRangeEnd);
-        emit KeysRangeUpdated(_c.moduleId, _c.operatorId, newKeyIndexRangeStart, newKeyIndexRangeEnd);
+        _setOperatorKeysRange(opKey, keyIndexStart, keyIndexEnd);
+        emit KeysRangeUpdated(_c.moduleId, _c.operatorId, keyIndexStart, keyIndexEnd);
     }
 
     function _getOperator(uint256 opKey)
@@ -366,27 +375,34 @@ contract CCCP is
         (moduleId, operatorId) = __decOpKey(opKey);
         _loadLidoNodeOperator(_c, moduleId, operatorId);
         state = _getOperatorState(opKey);
-        OperatorOptInOutFlags memory flags = _calcOptInOutFlags(state.optInOutState);
-        (, bool isDisabled) = _getModuleConfig(moduleId);
+        isEnabled = _isOperatorIsEnabledForPreconf(state.optInOutState, moduleId, _c.isActive);
 
+        return (moduleId, operatorId, isEnabled, state);
+    }
+
+    function _isOperatorIsEnabledForPreconf(OptInOutState memory optInOutState, uint24 moduleId, bool isOperatorActive)
+        internal
+        view
+        returns (bool)
+    {
+        OperatorOptInOutFlags memory flags = _calcOptInOutFlags(optInOutState);
+        (bool isModuleDisabled,,) = _getModuleConfig(moduleId);
         // operator is enabled:
         // - if it's s opted in
         // - if module not disabled
         // - if operator is active in Lido module
         // - if the contract is not paused
-        isEnabled = flags.isOptedIn && !isDisabled && _c.isActive && !paused();
-
-        return (moduleId, operatorId, isEnabled, state);
+        return flags.isOptedIn && !isModuleDisabled && isOperatorActive && !paused();
     }
 
     function _checkModuleParams(uint24 moduleId, uint64 startIndex, uint64 endIndex) internal view {
         (,, uint64 defaultOperatorMaxValidators,) = _getConfig();
-        (uint64 moduleMaxValidators, bool isDisabled) = _getModuleConfig(moduleId);
+        (bool isDisabled, uint64 operatorMaxValidators) = _getModuleConfig(moduleId);
         if (isDisabled) {
             revert ModuleDisabled();
         }
         uint64 totalKeys = endIndex - startIndex + 1;
-        uint64 maxValidators = moduleMaxValidators == 0 ? defaultOperatorMaxValidators : moduleMaxValidators;
+        uint64 maxValidators = operatorMaxValidators == 0 ? defaultOperatorMaxValidators : operatorMaxValidators;
 
         if (totalKeys > maxValidators) {
             revert KeysRangeExceedMaxValidators();
