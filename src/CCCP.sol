@@ -41,7 +41,7 @@ contract CCCP is
 
     struct OperatorOptInOutFlags {
         bool isOptedIn;
-        bool isOptedOut;
+        bool optOutInProgress;
         bool optInAllowed;
         bool optOutAllowed;
     }
@@ -74,9 +74,11 @@ contract CCCP is
     error RewardAddressMismatch();
     error OperatorNotActive();
     error ModuleDisabled();
-    error OperatorAlreadyRegistered();
+    error OperatorOptedIn();
+    error OperatorOptedOut();
     error OperatorOptInNotAllowed();
     error OperatorOptOutNotAllowed();
+    error OperatorOptOutInProgress();
     error KeyIndexOutOfRange();
     error KeysRangeExceedMaxValidators();
     error KeyIndexMismatch();
@@ -160,7 +162,7 @@ contract CCCP is
         OptInOutState memory optInOutState = _getOperatorOptInOutState(opKey);
         OperatorOptInOutFlags memory flags = _calcOptInOutFlags(optInOutState);
         if (flags.isOptedIn) {
-            revert OperatorAlreadyRegistered();
+            revert OperatorOptedIn();
         } else if (!flags.optInAllowed) {
             revert OperatorOptInNotAllowed();
         }
@@ -189,7 +191,7 @@ contract CCCP is
         OptInOutState memory optInOutState = _getOperatorOptInOutState(opKey);
         OperatorOptInOutFlags memory flags = _calcOptInOutFlags(optInOutState);
         if (!flags.isOptedIn) {
-            revert OperatorNotActive();
+            revert OperatorOptedOut();
         } else if (!flags.optOutAllowed) {
             revert OperatorOptOutNotAllowed();
         }
@@ -208,7 +210,9 @@ contract CCCP is
         OptInOutState memory optInOutState = _getOperatorOptInOutState(opKey);
         OperatorOptInOutFlags memory flags = _calcOptInOutFlags(optInOutState);
         if (!flags.isOptedIn) {
-            revert OperatorNotActive();
+            revert OperatorOptedOut();
+        } else if (flags.optOutInProgress) {
+            revert OperatorOptOutInProgress();
         }
         /// @dev ignore optOutAllowed, as the committee can force opt-out
 
@@ -225,7 +229,9 @@ contract CCCP is
         uint256 opKey = _getOpKeyByManager(msg.sender);
         OperatorOptInOutFlags memory flags = _calcOptInOutFlags(_getOperatorOptInOutState(opKey));
         if (!flags.isOptedIn) {
-            revert OperatorNotActive();
+            revert OperatorOptedOut();
+        } else if (flags.optOutInProgress) {
+            revert OperatorOptOutInProgress();
         }
 
         KeysRange memory keysRange = _getOperatorKeysRange(opKey);
@@ -255,8 +261,17 @@ contract CCCP is
             revert RewardAddressMismatch();
         }
 
+        uint256 opKey = _getOpKeyById(moduleId, operatorId);
+        OptInOutState memory optInOutState = _getOperatorOptInOutState(opKey);
+        OperatorOptInOutFlags memory flags = _calcOptInOutFlags(optInOutState);
+        if (!flags.isOptedIn) {
+            revert OperatorOptedOut();
+        } else if (flags.optOutInProgress) {
+            revert OperatorOptOutInProgress();
+        }
+
         /// @dev also checks if the proposed manager is already registered for different operator
-        _setOperatorManager(__encOpKey(moduleId, operatorId), newManager);
+        _setOperatorManager(opKey, newManager);
         emit OperatorManagerUpdated(moduleId, operatorId, newManager);
     }
 
@@ -286,7 +301,7 @@ contract CCCP is
     function getOperatorIsEnabledForPreconf(uint24 moduleId, uint64 operatorId) external view returns (bool) {
         LidoOperatorCache memory _c;
         _loadLidoNodeOperator(_c, moduleId, operatorId);
-        uint256 opKey = _getOpKeyById(moduleId, operatorId);
+        uint256 opKey = __encOpKey(moduleId, operatorId);
         OptInOutState memory optInOutState = _getOperatorOptInOutState(opKey);
 
         return _isOperatorIsEnabledForPreconf(optInOutState, moduleId, _c.isActive);
@@ -298,8 +313,8 @@ contract CCCP is
         returns (uint64 allowedValidators)
     {
         // check if the module has max validators limit
-        uint64 maxValidators = getModuleOperatorMaxValidators(moduleId);
-        if (maxValidators == 0) {
+        allowedValidators = getModuleOperatorMaxValidators(moduleId);
+        if (allowedValidators == 0) {
             return 0;
         }
         // check if the operator is active in Lido module
@@ -308,26 +323,25 @@ contract CCCP is
         if (!_c.isActive) {
             return 0;
         }
-        uint256 opKey = _getOpKeyById(moduleId, operatorId);
-        // check if the operator is already has the state
-        if (_getOperatorManager(opKey) == address(0)) {
-            return 0;
+        // min(_c.totalKeys, maxValidators)
+        if (allowedValidators > _c.totalKeys) {
+            allowedValidators = _c.totalKeys;
         }
 
-        KeysRange memory keysRange = _getOperatorKeysRange(opKey);
-        uint64 totalKeys = keysRange.indexEnd - keysRange.indexStart + 1;
-        // check if the operator has already reached the max validators limit
-        if (totalKeys >= maxValidators) {
+        uint256 opKey = __encOpKey(moduleId, operatorId);
+        OperatorOptInOutFlags memory flags = _calcOptInOutFlags(_getOperatorOptInOutState(opKey));
+        if (flags.isOptedIn && !flags.optOutInProgress) {
+            KeysRange memory keysRange = _getOperatorKeysRange(opKey);
+            uint64 totalKeys = keysRange.indexEnd - keysRange.indexStart + 1;
+            // check if the operator has already reached the max validators limit
+            if (totalKeys >= allowedValidators) {
+                return 0;
+            }
+            unchecked {
+                allowedValidators -= totalKeys;
+            }
+        } else if (!flags.optInAllowed) {
             return 0;
-        }
-
-        unchecked {
-            allowedValidators = maxValidators - totalKeys;
-        }
-        // check if the operator has enough keys to reach the max validators limit
-        uint64 restKeys = _c.totalKeys - totalKeys;
-        if (restKeys < allowedValidators) {
-            allowedValidators = restKeys;
         }
     }
 
@@ -490,15 +504,17 @@ contract CCCP is
         uint64 blockNumber = uint64(block.number);
         (uint64 optInMinDurationBlocks, uint64 optOutDelayDurationBlocks,,) = _getConfig();
 
-        bool isOptedOut =
-            optInOutState.optOutBlock > 0 && optInOutState.optOutBlock + optOutDelayDurationBlocks < blockNumber;
-        bool isOptedIn = optInOutState.optInBlock > 0 && !isOptedOut;
+        bool optOutInProgress =
+            optInOutState.optOutBlock > 0 && optInOutState.optOutBlock + optOutDelayDurationBlocks >= blockNumber;
+
+        bool isOptedIn = optInOutState.optInBlock > 0 && (optInOutState.optOutBlock == 0 || optOutInProgress);
         bool optInAllowed = !isOptedIn && !optInOutState.isOptOutForced;
-        bool optOutAllowed = isOptedIn && optInOutState.optInBlock + optInMinDurationBlocks < blockNumber;
+        bool optOutAllowed =
+            isOptedIn && !optOutInProgress && optInOutState.optInBlock + optInMinDurationBlocks < blockNumber;
 
         return OperatorOptInOutFlags({
             isOptedIn: isOptedIn,
-            isOptedOut: isOptedOut,
+            optOutInProgress: optOutInProgress,
             optInAllowed: optInAllowed,
             optOutAllowed: optOutAllowed
         });

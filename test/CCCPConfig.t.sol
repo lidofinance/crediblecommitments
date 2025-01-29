@@ -13,10 +13,10 @@ contract CCCPConfig is CCCPCommon {
     uint64 public maxValidators = 1111;
     uint64 public blockGasLimit = 1111111;
 
-    uint64 optInMinDurationBlocks = 32;
-    uint64 optOutDelayDurationBlocks = 64;
-    uint64 defaultOperatorMaxValidators = 100;
-    uint64 defaultBlockGasLimit = 1000000;
+    uint64 constant optInMinDurationBlocks = 32;
+    uint64 constant optOutDelayDurationBlocks = 64;
+    uint64 constant defaultOperatorMaxValidators = 100;
+    uint64 constant defaultBlockGasLimit = 1000000;
 
     function setUp() public virtual override {
         super.setUp();
@@ -165,18 +165,4 @@ contract CCCPConfig is CCCPCommon {
         cccp.setModuleConfig(moduleId, false, 0, 0);
         assertEq(cccp.getModuleOperatorMaxValidators(moduleId), defaultOperatorMaxValidators);
     }
-
-    // function test_GetInitialConfig() public {
-    //     (
-    //         uint64 newOptInMinDurationBlocks,
-    //         uint64 newOptOutDelayDurationBlocks,
-    //         uint64 newDefaultOperatorMaxValidators,
-    //         uint64 newDefaultBlockGasLimit
-    //     ) = cccp.getConfig();
-
-    //     assertEq(newOptInMinDurationBlocks, 32);
-    //     assertEq(newOptOutDelayDurationBlocks, 64);
-    //     assertEq(newDefaultOperatorMaxValidators, 100);
-    //     assertEq(newDefaultBlockGasLimit, 1000000);
-    // }
 }

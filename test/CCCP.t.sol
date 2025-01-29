@@ -20,6 +20,13 @@ contract CCCPOptIn is CCCPCommon {
     string public constant rpcUrl1 = "some-url-1";
     string public constant rpcUrl2 = "some-url-2";
 
+    uint32 constant opKeysCount = 10;
+
+    uint64 constant optInMinDurationBlocks = 0;
+    uint64 constant optOutDelayDurationBlocks = 0;
+    uint64 constant defaultOperatorMaxValidators = 100;
+    uint64 constant defaultBlockGasLimit = 1000000;
+
     function setUp() public virtual override {
         super.setUp();
 
@@ -32,19 +39,19 @@ contract CCCPOptIn is CCCPCommon {
         _enableInitializers(address(cccp));
         cccp.initialize({
             committeeAddress: committee,
-            optInMinDurationBlocks: 0,
-            optOutDelayDurationBlocks: 0,
-            defaultOperatorMaxValidators: 10,
-            defaultBlockGasLimit: 1000000
+            optInMinDurationBlocks: optInMinDurationBlocks,
+            optOutDelayDurationBlocks: optOutDelayDurationBlocks,
+            defaultOperatorMaxValidators: defaultOperatorMaxValidators,
+            defaultBlockGasLimit: defaultBlockGasLimit
         });
 
-        noCsm1Id = createNo(csm, noCsm1, 10);
-        noCurated1Id = createNo(nor, noCurated1, 10);
+        noCsm1Id = createNo(csm, noCsm1, opKeysCount);
+        noCurated1Id = createNo(nor, noCurated1, opKeysCount);
     }
 
     function test_OptIn() public {
         // opt in on behalf of noCsm1
-        vm.broadcast(noCsm1);
+        vm.prank(noCsm1);
         vm.expectEmit(true, true, true, false, address(cccp));
         emit CCCP.OperatorManagerUpdated(csmId, noCsm1Id, noCsm1Manager);
         vm.expectEmit(true, true, true, false, address(cccp));
@@ -69,7 +76,7 @@ contract CCCPOptIn is CCCPCommon {
 
     function test_GetOperatorByManager() public {
         // opt in on behalf of noCsm1
-        vm.broadcast(noCsm1);
+        vm.prank(noCsm1);
         cccp.optIn({
             moduleId: csmId,
             operatorId: noCsm1Id,
@@ -97,7 +104,7 @@ contract CCCPOptIn is CCCPCommon {
 
     function test_GetOperatorById() public {
         // opt in on behalf of noCsm1
-        vm.broadcast(noCsm1);
+        vm.prank(noCsm1);
         cccp.optIn({
             moduleId: csmId,
             operatorId: noCsm1Id,
@@ -136,7 +143,7 @@ contract CCCPOptIn is CCCPCommon {
     }
 
     function test_OptIn_RevertWhen_WrongRewardAddress() public {
-        vm.broadcast(stranger1);
+        vm.prank(stranger1);
         vm.expectRevert(CCCP.RewardAddressMismatch.selector);
         cccp.optIn({
             moduleId: csmId,
@@ -149,7 +156,7 @@ contract CCCPOptIn is CCCPCommon {
     }
 
     function test_OptIn_RevertWhen_WrongModuleId() public {
-        vm.broadcast(noCsm1);
+        vm.prank(noCsm1);
         vm.expectRevert(IStakingRouter.StakingModuleUnregistered.selector);
         cccp.optIn({
             moduleId: 999,
@@ -165,7 +172,7 @@ contract CCCPOptIn is CCCPCommon {
         // set noCsm1 to inactive
         updateNoActive(csm, noCsm1Id, false);
 
-        vm.broadcast(noCsm1);
+        vm.prank(noCsm1);
         vm.expectRevert(CCCP.OperatorNotActive.selector);
         cccp.optIn({
             moduleId: csmId,
@@ -179,7 +186,7 @@ contract CCCPOptIn is CCCPCommon {
 
     function test_OptIn_RevertWhen_OperatorAlreadyOptedIn() public {
         // optin
-        vm.broadcast(noCsm1);
+        vm.prank(noCsm1);
         cccp.optIn({
             moduleId: csmId,
             operatorId: noCsm1Id,
@@ -190,8 +197,8 @@ contract CCCPOptIn is CCCPCommon {
         });
 
         // repeat optin
-        vm.broadcast(noCsm1);
-        vm.expectRevert(CCCP.OperatorAlreadyRegistered.selector);
+        vm.prank(noCsm1);
+        vm.expectRevert(CCCP.OperatorOptedIn.selector);
         cccp.optIn({
             moduleId: csmId,
             operatorId: noCsm1Id,
@@ -204,7 +211,7 @@ contract CCCPOptIn is CCCPCommon {
 
     function test_OptIn_RevertWhen_OperatorForceOptedOut() public {
         // optin
-        vm.broadcast(noCsm1);
+        vm.prank(noCsm1);
         cccp.optIn({
             moduleId: csmId,
             operatorId: noCsm1Id,
@@ -216,12 +223,12 @@ contract CCCPOptIn is CCCPCommon {
 
         // force optout
         vm.roll(block.number + 100);
-        vm.broadcast(committee);
+        vm.prank(committee);
         cccp.optOut({moduleId: csmId, operatorId: noCsm1Id});
 
         // repeat optin
         vm.roll(block.number + 100);
-        vm.broadcast(noCsm1);
+        vm.prank(noCsm1);
         vm.expectRevert(CCCP.OperatorOptInNotAllowed.selector);
         cccp.optIn({
             moduleId: csmId,
@@ -235,7 +242,7 @@ contract CCCPOptIn is CCCPCommon {
 
     function test_OptIn_RevertWhen_ManagerBelongsOtherOperator() public {
         // optin
-        vm.broadcast(noCurated1);
+        vm.prank(noCurated1);
         cccp.optIn({
             moduleId: norId,
             operatorId: noCurated1Id,
@@ -246,7 +253,7 @@ contract CCCPOptIn is CCCPCommon {
         });
 
         // optin with same manager
-        vm.broadcast(noCsm1);
+        vm.prank(noCsm1);
         vm.expectRevert(ICCCPOperatorStatesStorage.ManagerBelongsToOtherOperator.selector);
         cccp.optIn({
             moduleId: csmId,
@@ -260,7 +267,7 @@ contract CCCPOptIn is CCCPCommon {
 
     function test_OptIn_RevertWhen_KeyIndexWrongOrder() public {
         // optin
-        vm.broadcast(noCsm1);
+        vm.prank(noCsm1);
         vm.expectRevert(CCCP.KeyIndexMismatch.selector);
         cccp.optIn({
             moduleId: csmId,
@@ -274,7 +281,7 @@ contract CCCPOptIn is CCCPCommon {
 
     function test_OptIn_RevertWhen_KeyIndexOutOfRange() public {
         // optin
-        vm.broadcast(noCsm1);
+        vm.prank(noCsm1);
         vm.expectRevert(CCCP.KeyIndexOutOfRange.selector);
         cccp.optIn({
             moduleId: csmId,
@@ -284,5 +291,110 @@ contract CCCPOptIn is CCCPCommon {
             keyIndexEnd: 100,
             rpcURL: ""
         });
+    }
+
+    function test_getOperatorIsEnabledForPreconf() public {
+        // wrong op id
+        // assertFalse(cccp.getOperatorIsEnabledForPreconf(csmId, 999));
+
+        // not yet opted in
+        assertFalse(cccp.getOperatorIsEnabledForPreconf(csmId, noCsm1Id));
+        // opt in on behalf of noCsm1
+        vm.prank(noCsm1);
+        cccp.optIn({
+            moduleId: csmId,
+            operatorId: noCsm1Id,
+            manager: noCsm1Manager,
+            keyIndexStart: 2,
+            keyIndexEnd: 4,
+            rpcURL: rpcUrl1
+        });
+        // opted in
+        assertTrue(cccp.getOperatorIsEnabledForPreconf(csmId, noCsm1Id));
+    }
+
+    function test_GetOperatorAllowedValidators() public {
+        vm.prank(committee);
+        cccp.setModuleConfig(csmId, true, 0, 0);
+        // 0 for disabled module
+        assertEq(cccp.getOperatorAllowedValidators(csmId, noCsm1Id), 0);
+
+        vm.prank(committee);
+        cccp.setModuleConfig(csmId, false, 0, 0);
+
+        // set noCsm1 to inactive
+        updateNoActive(csm, noCsm1Id, false);
+        // 0 for inactive operator
+        assertEq(cccp.getOperatorAllowedValidators(csmId, noCsm1Id), 0);
+        updateNoActive(csm, noCsm1Id, true);
+
+        /// operator NOT yet opted in
+        ///
+        vm.prank(committee);
+        cccp.setConfig(0, 0, opKeysCount - 1, defaultBlockGasLimit);
+
+        // operatorMaxValidators when operatorMaxValidators < operatorTotalAddedKeys
+        assertEq(cccp.getOperatorAllowedValidators(csmId, noCsm1Id), opKeysCount - 1);
+
+        vm.prank(committee);
+        cccp.setConfig(0, 99, defaultOperatorMaxValidators, defaultBlockGasLimit);
+
+        // operatorTotalAddedKeys when operatorMaxValidators > operatorTotalAddedKeys
+        assertEq(cccp.getOperatorAllowedValidators(csmId, noCsm1Id), opKeysCount);
+
+        // opt in on behalf of noCsm1 with 3 keys
+        vm.prank(noCsm1);
+        cccp.optIn({
+            moduleId: csmId,
+            operatorId: noCsm1Id,
+            manager: noCsm1Manager,
+            keyIndexStart: 2,
+            keyIndexEnd: 4,
+            rpcURL: rpcUrl1
+        });
+
+        // operatorMaxValidators > operatorTotalAddedKeys
+        assertEq(cccp.getOperatorAllowedValidators(csmId, noCsm1Id), opKeysCount - 3);
+
+        // voluntary opt out
+        vm.roll(block.number + 100);
+        vm.prank(noCsm1Manager);
+        cccp.optOut();
+        // optOut in progress
+        assertEq(cccp.getOperatorAllowedValidators(csmId, noCsm1Id), 0);
+
+        // optOut finished
+        vm.roll(block.number + 100);
+        assertEq(cccp.getOperatorAllowedValidators(csmId, noCsm1Id), opKeysCount);
+
+        // opt in on behalf of noCsm1 with 9 keys
+        vm.prank(noCsm1);
+        cccp.optIn({
+            moduleId: csmId,
+            operatorId: noCsm1Id,
+            manager: noCsm1Manager,
+            keyIndexStart: 0,
+            keyIndexEnd: 8,
+            rpcURL: rpcUrl1
+        });
+        assertEq(cccp.getOperatorAllowedValidators(csmId, noCsm1Id), opKeysCount - 9);
+
+        // reduce max operator validators in module config to 5
+        vm.prank(committee);
+        cccp.setModuleConfig(csmId, false, 5, 0);
+        // operator opted in totalKeys > operatorMaxValidators
+        assertEq(cccp.getOperatorAllowedValidators(csmId, noCsm1Id), 0);
+
+        // force optout
+        vm.roll(block.number + 100);
+        vm.prank(committee);
+        cccp.optOut({moduleId: csmId, operatorId: noCsm1Id});
+
+        // optOut in progress
+        assertEq(cccp.getOperatorAllowedValidators(csmId, noCsm1Id), 0);
+
+        // optOut finished, but forced optout
+        vm.roll(block.number + 100);
+        assertEq(cccp.getOperatorAllowedValidators(csmId, noCsm1Id), 0);
     }
 }
