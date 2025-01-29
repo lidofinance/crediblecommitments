@@ -1,130 +1,24 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity 0.8.28;
 
-import {Test, console} from "forge-std/Test.sol";
-import {CCCPConfigStorage, ICCCPConfigStorage} from "../src/lib/CCCPConfigStorage.sol";
-import {CCCPOperatorStatesStorage, ICCCPOperatorStatesStorage} from "../src/lib/CCCPOperatorStatesStorage.sol";
+import {CCCPCommon} from "./helpers/CCCPCommon.sol";
+
 import {CCCP} from "../src/CCCP.sol";
 import {CCCPMock} from "./helpers/mocks/CCCPMock.sol";
-import {Initializable} from "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
-import {Fixtures} from "./helpers/Fixtures.sol";
-import {Utilities} from "./helpers/Utilities.sol";
-import {LidoLocatorMock} from "test/helpers/mocks/LidoLocatorMock.sol";
-import {StakingModuleMock} from "test/helpers/mocks/StakingModuleMock.sol";
-import {StakingRouterMock, IStakingRouter} from "test/helpers/mocks/StakingRouterMock.sol";
-import {CuratedModuleMock} from "test/helpers/mocks/CuratedModuleMock.sol";
-import {CSModuleMock} from "test/helpers/mocks/CSModuleMock.sol";
-
-abstract contract CCCPFixtures is Test, Fixtures, Utilities {
-    LidoLocatorMock public locator;
-    StakingRouterMock public sr;
-    CuratedModuleMock public nor;
-    CSModuleMock public csm;
-
-    // address internal admin;
-    address internal stranger1;
-    address internal stranger2;
-    address internal noCsm1;
-    address internal noCsm1Manager;
-    address internal noCurated1;
-    address internal noCurated1Manager;
-    address internal committee;
-
-    // uint64 optInMinDurationBlocks = 100;
-    // uint64 optOutDelayDurationBlocks = 200;
-    // uint64 defaultOperatorMaxValidators = 100;
-    // uint64 defaultBlockGasLimit = 1000000;
-
-    // function createNo(uint256 modId, address rewAddr) internal returns (uint256) {
-    //     StakingModuleMock m = StakingModuleMock(sr.getStakingModule(modId).stakingModuleAddress);
-    //     return createNo(csm, rewAddr, 1);
-    // }
-
-    function createNo(StakingModuleMock m, address rewAddr, uint32 keysCount) internal returns (uint64) {
-        m.addNo(true, rewAddr, keysCount);
-        return uint64(m.getNodeOperatorsCount() - 1);
-    }
-
-    function updateNoKeys(StakingModuleMock m, uint256 noId, uint32 keysCount) internal {
-        m.updNoKeys(noId, keysCount);
-    }
-
-    function updateNoActive(StakingModuleMock m, uint256 noId, bool active) internal {
-        m.updNoActive(noId, active);
-    }
-}
-
-contract CCCPCommon is CCCPFixtures {
-    function setUp() public virtual {
-        committee = nextAddress("COMMITTEE");
-        stranger1 = nextAddress("STRANGER1");
-        stranger2 = nextAddress("STRANGER2");
-
-        (locator, sr, nor, csm) = initLidoMock();
-    }
-}
-
-contract CCCPInitialize is CCCPCommon {
-    function test_constructor() public {
-        CCCPMock cccp = new CCCPMock({lidoLocator: address(locator), csModuleType: "csm-type"});
-        assertEq(cccp.__test__getCSModuleType(), "csm-type");
-        assertEq(address(cccp.LIDO_LOCATOR()), address(locator));
-        assertEq(cccp.getContractVersion(), type(uint64).max);
-    }
-
-    function test_constructor_RevertWhen_ZeroLocator() public {
-        vm.expectRevert(CCCP.ZeroLocatorAddress.selector);
-        new CCCPMock({lidoLocator: address(0), csModuleType: "csm-type"});
-    }
-
-    function test_constructor_RevertWhen_InitOnImpl() public {
-        CCCPMock cccp = new CCCPMock({lidoLocator: address(locator), csModuleType: "csm-type"});
-
-        vm.expectRevert(Initializable.InvalidInitialization.selector);
-        cccp.initialize({
-            committeeAddress: committee,
-            optInMinDurationBlocks: 0,
-            optOutDelayDurationBlocks: 0,
-            defaultOperatorMaxValidators: 10,
-            defaultBlockGasLimit: 1000000
-        });
-    }
-
-    function test_initialize() public {
-        CCCPMock cccp = new CCCPMock({lidoLocator: address(locator), csModuleType: "csm-type"});
-        _enableInitializers(address(cccp));
-        cccp.initialize({
-            committeeAddress: committee,
-            optInMinDurationBlocks: 32,
-            optOutDelayDurationBlocks: 64,
-            defaultOperatorMaxValidators: 10,
-            defaultBlockGasLimit: 1000000
-        });
-
-        (
-            uint64 optInMinDurationBlocks,
-            uint64 optOutDelayDurationBlocks,
-            uint64 defaultOperatorMaxValidators,
-            uint64 defaultBlockGasLimit
-        ) = cccp.getConfig();
-
-        assertEq(optInMinDurationBlocks, 32);
-        assertEq(optOutDelayDurationBlocks, 64);
-        assertEq(defaultOperatorMaxValidators, 10);
-        assertEq(defaultBlockGasLimit, 1000000);
-        assertEq(cccp.getContractVersion(), 1);
-        assertFalse(cccp.paused());
-    }
-}
+import {IStakingRouter} from "test/helpers/mocks/StakingRouterMock.sol";
+import {ICCCPOperatorStatesStorage} from "../src/interfaces/ICCCPOperatorStatesStorage.sol";
 
 contract CCCPOptIn is CCCPCommon {
-    CCCPMock public cccp;
+    CCCP public cccp;
 
     uint64 public noCsm1Id;
     uint64 public noCurated1Id;
 
     uint24 public constant norId = 1;
     uint24 public constant csmId = 2;
+
+    string public constant rpcUrl1 = "some-url-1";
+    string public constant rpcUrl2 = "some-url-2";
 
     function setUp() public virtual override {
         super.setUp();
@@ -152,7 +46,11 @@ contract CCCPOptIn is CCCPCommon {
         // opt in on behalf of noCsm1
         vm.broadcast(noCsm1);
         vm.expectEmit(true, true, true, false, address(cccp));
+        emit CCCP.OperatorManagerUpdated(csmId, noCsm1Id, noCsm1Manager);
+        vm.expectEmit(true, true, true, false, address(cccp));
         emit CCCP.KeysRangeUpdated(csmId, noCsm1Id, 2, 4);
+        vm.expectEmit(true, true, true, false, address(cccp));
+        emit CCCP.RPCUrlUpdated(csmId, noCsm1Id, rpcUrl1);
         vm.expectEmit(true, true, true, false, address(cccp));
         emit CCCP.OptInSucceeded(csmId, noCsm1Id, noCsm1Manager);
 
@@ -160,9 +58,25 @@ contract CCCPOptIn is CCCPCommon {
             moduleId: csmId,
             operatorId: noCsm1Id,
             manager: noCsm1Manager,
-            newKeyIndexRangeStart: 2,
-            newKeyIndexRangeEnd: 4,
-            rpcURL: ""
+            keyIndexStart: 2,
+            keyIndexEnd: 4,
+            rpcURL: rpcUrl1
+        });
+
+        assertEq(cccp.getOperatorIsEnabledForPreconf(csmId, noCsm1Id), true);
+        assertEq(cccp.getOperatorManager(csmId, noCsm1Id), noCsm1Manager);
+    }
+
+    function test_GetOperatorByManager() public {
+        // opt in on behalf of noCsm1
+        vm.broadcast(noCsm1);
+        cccp.optIn({
+            moduleId: csmId,
+            operatorId: noCsm1Id,
+            manager: noCsm1Manager,
+            keyIndexStart: 2,
+            keyIndexEnd: 4,
+            rpcURL: rpcUrl1
         });
 
         (uint24 moduleId, uint64 operatorId, bool isEnabled, CCCP.OperatorState memory state) =
@@ -178,7 +92,35 @@ contract CCCPOptIn is CCCPCommon {
         assertEq(state.optInOutState.optInBlock, block.number);
         assertEq(state.optInOutState.optOutBlock, 0);
         assertEq(state.optInOutState.isOptOutForced, false);
-        assertEq(state.extraData.rpcURL, "");
+        assertEq(state.extraData.rpcURL, rpcUrl1);
+    }
+
+    function test_GetOperatorById() public {
+        // opt in on behalf of noCsm1
+        vm.broadcast(noCsm1);
+        cccp.optIn({
+            moduleId: csmId,
+            operatorId: noCsm1Id,
+            manager: noCsm1Manager,
+            keyIndexStart: 2,
+            keyIndexEnd: 4,
+            rpcURL: rpcUrl1
+        });
+
+        (uint24 moduleId, uint64 operatorId, bool isEnabled, CCCP.OperatorState memory state) =
+            cccp.getOperator(csmId, noCsm1Id);
+
+        assertEq(moduleId, csmId);
+        assertEq(operatorId, noCsm1Id);
+        assertEq(isEnabled, true);
+
+        assertEq(state.keysRange.indexStart, 2);
+        assertEq(state.keysRange.indexEnd, 4);
+        assertEq(state.manager, noCsm1Manager);
+        assertEq(state.optInOutState.optInBlock, block.number);
+        assertEq(state.optInOutState.optOutBlock, 0);
+        assertEq(state.optInOutState.isOptOutForced, false);
+        assertEq(state.extraData.rpcURL, rpcUrl1);
     }
 
     function test_OptIn_RevertWhen_ZeroManagerAddress() public {
@@ -187,8 +129,8 @@ contract CCCPOptIn is CCCPCommon {
             moduleId: csmId,
             operatorId: noCsm1Id,
             manager: address(0),
-            newKeyIndexRangeStart: 2,
-            newKeyIndexRangeEnd: 4,
+            keyIndexStart: 2,
+            keyIndexEnd: 4,
             rpcURL: ""
         });
     }
@@ -200,8 +142,8 @@ contract CCCPOptIn is CCCPCommon {
             moduleId: csmId,
             operatorId: noCsm1Id,
             manager: noCsm1Manager,
-            newKeyIndexRangeStart: 2,
-            newKeyIndexRangeEnd: 4,
+            keyIndexStart: 2,
+            keyIndexEnd: 4,
             rpcURL: ""
         });
     }
@@ -213,8 +155,8 @@ contract CCCPOptIn is CCCPCommon {
             moduleId: 999,
             operatorId: noCsm1Id,
             manager: noCsm1Manager,
-            newKeyIndexRangeStart: 2,
-            newKeyIndexRangeEnd: 4,
+            keyIndexStart: 2,
+            keyIndexEnd: 4,
             rpcURL: ""
         });
     }
@@ -229,8 +171,8 @@ contract CCCPOptIn is CCCPCommon {
             moduleId: csmId,
             operatorId: noCsm1Id,
             manager: noCsm1Manager,
-            newKeyIndexRangeStart: 2,
-            newKeyIndexRangeEnd: 4,
+            keyIndexStart: 2,
+            keyIndexEnd: 4,
             rpcURL: ""
         });
     }
@@ -242,8 +184,8 @@ contract CCCPOptIn is CCCPCommon {
             moduleId: csmId,
             operatorId: noCsm1Id,
             manager: noCsm1Manager,
-            newKeyIndexRangeStart: 2,
-            newKeyIndexRangeEnd: 4,
+            keyIndexStart: 2,
+            keyIndexEnd: 4,
             rpcURL: ""
         });
 
@@ -254,8 +196,8 @@ contract CCCPOptIn is CCCPCommon {
             moduleId: csmId,
             operatorId: noCsm1Id,
             manager: noCsm1Manager,
-            newKeyIndexRangeStart: 2,
-            newKeyIndexRangeEnd: 4,
+            keyIndexStart: 2,
+            keyIndexEnd: 4,
             rpcURL: ""
         });
     }
@@ -267,8 +209,8 @@ contract CCCPOptIn is CCCPCommon {
             moduleId: csmId,
             operatorId: noCsm1Id,
             manager: noCsm1Manager,
-            newKeyIndexRangeStart: 2,
-            newKeyIndexRangeEnd: 4,
+            keyIndexStart: 2,
+            keyIndexEnd: 4,
             rpcURL: ""
         });
 
@@ -285,8 +227,8 @@ contract CCCPOptIn is CCCPCommon {
             moduleId: csmId,
             operatorId: noCsm1Id,
             manager: noCsm1Manager,
-            newKeyIndexRangeStart: 2,
-            newKeyIndexRangeEnd: 4,
+            keyIndexStart: 2,
+            keyIndexEnd: 4,
             rpcURL: ""
         });
     }
@@ -298,8 +240,8 @@ contract CCCPOptIn is CCCPCommon {
             moduleId: norId,
             operatorId: noCurated1Id,
             manager: noCurated1Manager,
-            newKeyIndexRangeStart: 2,
-            newKeyIndexRangeEnd: 4,
+            keyIndexStart: 2,
+            keyIndexEnd: 4,
             rpcURL: ""
         });
 
@@ -310,8 +252,8 @@ contract CCCPOptIn is CCCPCommon {
             moduleId: csmId,
             operatorId: noCsm1Id,
             manager: noCurated1Manager,
-            newKeyIndexRangeStart: 2,
-            newKeyIndexRangeEnd: 4,
+            keyIndexStart: 2,
+            keyIndexEnd: 4,
             rpcURL: ""
         });
     }
@@ -324,8 +266,8 @@ contract CCCPOptIn is CCCPCommon {
             moduleId: csmId,
             operatorId: noCsm1Id,
             manager: noCsm1Manager,
-            newKeyIndexRangeStart: 4,
-            newKeyIndexRangeEnd: 2,
+            keyIndexStart: 4,
+            keyIndexEnd: 2,
             rpcURL: ""
         });
     }
@@ -338,8 +280,8 @@ contract CCCPOptIn is CCCPCommon {
             moduleId: csmId,
             operatorId: noCsm1Id,
             manager: noCsm1Manager,
-            newKeyIndexRangeStart: 2,
-            newKeyIndexRangeEnd: 100,
+            keyIndexStart: 2,
+            keyIndexEnd: 100,
             rpcURL: ""
         });
     }
