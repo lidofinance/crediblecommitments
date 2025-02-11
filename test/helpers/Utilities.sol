@@ -3,6 +3,7 @@
 pragma solidity 0.8.28;
 
 import {CommonBase, Vm} from "forge-std/Base.sol";
+import {IAccessControl} from "@openzeppelin/contracts/access/IAccessControl.sol";
 
 /// @author madlabman
 contract Utilities is CommonBase {
@@ -19,5 +20,11 @@ contract Utilities is CommonBase {
         address a = nextAddress();
         vm.label(a, label);
         return a;
+    }
+
+    function expectRoleRevert(address account, bytes32 neededRole) internal {
+        vm.expectRevert(
+            abi.encodeWithSelector(IAccessControl.AccessControlUnauthorizedAccount.selector, account, neededRole)
+        );
     }
 }

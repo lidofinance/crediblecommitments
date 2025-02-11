@@ -3,10 +3,10 @@
 
 pragma solidity 0.8.28;
 
-import {DeployBase} from "./DeployBase.sol";
+import {UpgradeBase} from "./UpgradeBase.sol";
 
-contract DeployHolesky is DeployBase {
-    constructor() DeployBase("holesky", 17000) {
+contract UpgradeHolesky is UpgradeBase {
+    constructor() UpgradeBase("holesky", 17000) {
         // implementation constants
         params.lidoLocatorAddress = 0x28FAB2059C713A7F9D8c86Db49f9bb0e96Af1ef8;
         params.csModuleType = "community-onchain-v1";

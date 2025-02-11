@@ -5,8 +5,8 @@ pragma solidity 0.8.28;
 import {StdCheats} from "forge-std/StdCheats.sol";
 import {Test} from "forge-std/Test.sol";
 
-import {DeployParams} from "../../script/DeployBase.s.sol";
-import {CredibleCommitmentCurationProvider} from "../../src/CredibleCommitmentCurationProvider.sol";
+import {DeployParams} from "../../script/DeployBase.sol";
+import {CCR} from "../../src/CCR.sol";
 
 import {ILidoLocator} from "../../src/interfaces/ILidoLocator.sol";
 import {IStakingRouter} from "../../src/interfaces/IStakingRouter.sol";
@@ -53,11 +53,11 @@ contract DeploymentFixtures is StdCheats, Test {
 
     struct DeploymentConfig {
         uint256 chainId;
-        address cccp;
+        address ccr;
         address lidoLocator;
     }
 
-    CredibleCommitmentCurationProvider public cccp;
+    CCR public ccr;
     ILidoLocator public locator;
     IStakingRouter public stakingRouter;
 
@@ -73,7 +73,7 @@ contract DeploymentFixtures is StdCheats, Test {
         DeploymentConfig memory deploymentConfig = parseDeploymentConfig(config);
         assertEq(deploymentConfig.chainId, block.chainid, "ChainId mismatch");
 
-        cccp = CredibleCommitmentCurationProvider(deploymentConfig.cccp);
+        ccr = CCR(deploymentConfig.ccr);
         locator = ILidoLocator(deploymentConfig.lidoLocator);
         stakingRouter = IStakingRouter(locator.stakingRouter());
     }
@@ -81,8 +81,8 @@ contract DeploymentFixtures is StdCheats, Test {
     function parseDeploymentConfig(string memory config) public returns (DeploymentConfig memory deploymentConfig) {
         deploymentConfig.chainId = vm.parseJsonUint(config, ".ChainId");
 
-        deploymentConfig.cccp = vm.parseJsonAddress(config, ".CCCP");
-        vm.label(deploymentConfig.cccp, "csm");
+        deploymentConfig.ccr = vm.parseJsonAddress(config, ".CCR");
+        vm.label(deploymentConfig.ccr, "csm");
 
         deploymentConfig.lidoLocator = vm.parseJsonAddress(config, ".LidoLocator");
         vm.label(deploymentConfig.lidoLocator, "LidoLocator");

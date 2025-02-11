@@ -9,7 +9,7 @@ abstract contract StakingModuleMock is IStakingModule {
     struct NO {
         bool active;
         address rewardAddress;
-        uint32 totalAddedValidators;
+        uint32 totalAddedKeys;
     }
 
     NO[] public ops;
@@ -23,11 +23,11 @@ abstract contract StakingModuleMock is IStakingModule {
     function updNo(uint256 id, bool active, address rewAddr, uint32 keys) public {
         ops[id].active = active;
         ops[id].rewardAddress = rewAddr;
-        ops[id].totalAddedValidators = keys;
+        ops[id].totalAddedKeys = keys;
     }
 
     function updNoKeys(uint256 id, uint32 keys) public {
-        ops[id].totalAddedValidators = keys;
+        ops[id].totalAddedKeys = keys;
     }
 
     function updNoActive(uint256 id, bool active) public {

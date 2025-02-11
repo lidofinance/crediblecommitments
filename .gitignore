@@ -22,3 +22,6 @@ lcov.info
 !.yarn/versions
 
 lib/*
+
+scc-report.*
+scm-report.*

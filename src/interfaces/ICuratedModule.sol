@@ -13,8 +13,8 @@ interface ICuratedModule is IStakingModule {
             bool active,
             string memory name,
             address rewardAddress,
-            uint64 totalVettedValidators,
-            uint64 totalExitedValidators,
-            uint64 totalAddedValidators
+            uint64 totalVettedKeys,
+            uint64 totalExitedKeys,
+            uint64 totalAddedKeys
         );
 }
