@@ -3,62 +3,59 @@
 
 pragma solidity 0.8.28;
 
-import {ICCCPConfigStorage} from "../interfaces/ICCCPConfigStorage.sol";
+import {ICCRConfigStorage} from "../interfaces/ICCRConfigStorage.sol";
 
-abstract contract CCCPConfigStorage is ICCCPConfigStorage {
+abstract contract CCRConfigStorage is ICCRConfigStorage {
     bytes32 private immutable STORAGE_SLOT_REF;
 
     constructor() {
         STORAGE_SLOT_REF = keccak256(
-            abi.encode(uint256(keccak256(abi.encodePacked("lido.cccp.storage.ConfigStorage"))) - 1)
+            abi.encode(uint256(keccak256(abi.encodePacked("lido.ccr.storage.ConfigStorage"))) - 1)
         ) & ~bytes32(uint256(0xff));
     }
 
     function _setConfig(
-        uint64 optInMinDurationBlocks,
-        uint64 optOutDelayDurationBlocks,
-        uint64 defaultOperatorMaxValidators,
+        uint64 optInDelayBlocks,
+        uint64 optOutDelayBlocks,
+        uint64 defaultOperatorMaxKeys,
         uint64 defaultBlockGasLimit
     ) internal {
-        if (defaultOperatorMaxValidators == 0) {
-            revert ZeroDefaultOperatorMaxValidators();
+        if (defaultOperatorMaxKeys == 0) {
+            revert ZeroDefaultOperatorMaxKeys();
         }
         if (defaultBlockGasLimit == 0) {
             revert ZeroDefaultBlockGasLimit();
         }
         _getConfigStorage()._config = Config({
-            optInMinDurationBlocks: optInMinDurationBlocks,
-            optOutDelayDurationBlocks: optOutDelayDurationBlocks,
-            defaultOperatorMaxValidators: defaultOperatorMaxValidators,
+            optInDelayBlocks: optInDelayBlocks,
+            optOutDelayBlocks: optOutDelayBlocks,
+            defaultOperatorMaxKeys: defaultOperatorMaxKeys,
             defaultBlockGasLimit: defaultBlockGasLimit
         });
     }
 
-    function _setModuleConfig(uint24 moduleId, bool isDisabled, uint64 operatorMaxValidators, uint64 blockGasLimit)
+    function _setModuleConfig(uint24 moduleId, bool isDisabled, uint64 operatorMaxKeys, uint64 blockGasLimit)
         internal
     {
-        _getConfigStorage()._modules[moduleId] = ModuleConfig({
-            isDisabled: isDisabled,
-            operatorMaxValidators: operatorMaxValidators,
-            blockGasLimit: blockGasLimit
-        });
+        _getConfigStorage()._modules[moduleId] =
+            ModuleConfig({isDisabled: isDisabled, operatorMaxKeys: operatorMaxKeys, blockGasLimit: blockGasLimit});
     }
 
     function _getConfig()
         internal
         view
         returns (
-            uint64 optInMinDurationBlocks,
-            uint64 optOutDelayDurationBlocks,
-            uint64 defaultOperatorMaxValidators,
+            uint64 optInDelayBlocks,
+            uint64 optOutDelayBlocks,
+            uint64 defaultOperatorMaxKeys,
             uint64 defaultBlockGasLimit
         )
     {
         Config memory config = _getConfigStorage()._config;
         return (
-            config.optInMinDurationBlocks,
-            config.optOutDelayDurationBlocks,
-            config.defaultOperatorMaxValidators,
+            config.optInDelayBlocks,
+            config.optOutDelayBlocks,
+            config.defaultOperatorMaxKeys,
             config.defaultBlockGasLimit
         );
     }
@@ -66,10 +63,10 @@ abstract contract CCCPConfigStorage is ICCCPConfigStorage {
     function _getModuleConfig(uint24 moduleId)
         internal
         view
-        returns (bool isDisabled, uint64 operatorMaxValidators, uint64 blockGasLimit)
+        returns (bool isDisabled, uint64 operatorMaxKeys, uint64 blockGasLimit)
     {
         ModuleConfig memory moduleConfig = _getConfigStorage()._modules[moduleId];
-        return (moduleConfig.isDisabled, moduleConfig.operatorMaxValidators, moduleConfig.blockGasLimit);
+        return (moduleConfig.isDisabled, moduleConfig.operatorMaxKeys, moduleConfig.blockGasLimit);
     }
 
     /**

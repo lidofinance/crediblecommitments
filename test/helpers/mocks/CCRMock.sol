@@ -3,10 +3,10 @@
 
 pragma solidity 0.8.28;
 
-import {CCCP} from "../../../src/CCCP.sol";
+import {CCR} from "../../../src/CCR.sol";
 
-contract CCCPMock is CCCP {
-    constructor(address lidoLocator, bytes32 csModuleType) CCCP(lidoLocator, csModuleType) {}
+contract CCRMock is CCR {
+    constructor(address lidoLocator, bytes32 csModuleType) CCR(lidoLocator, csModuleType) {}
 
     function __test__getCSModuleType() external view returns (bytes32) {
         return CS_MODULE_TYPE;

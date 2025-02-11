@@ -8,7 +8,7 @@ import {Utilities} from "../../helpers/Utilities.sol";
 import {DeploymentFixtures} from "../../helpers/Fixtures.sol";
 import {DeployParams} from "../../../script/DeployBase.sol";
 import {OssifiableProxy} from "../../../src/lib/proxy/OssifiableProxy.sol";
-import {CCCP} from "../../../src/CCCP.sol";
+import {CCR} from "../../../src/CCR.sol";
 import {Initializable} from "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 
 contract CSModuleDeploymentTest is Test, Utilities, DeploymentFixtures {
@@ -22,48 +22,44 @@ contract CSModuleDeploymentTest is Test, Utilities, DeploymentFixtures {
     }
 
     function test_constructor() public view {
-        assertEq(address(cccp.LIDO_LOCATOR()), deployParams.lidoLocatorAddress);
+        assertEq(address(ccr.LIDO_LOCATOR()), deployParams.lidoLocatorAddress);
     }
 
     function test_initializer() public view {
-        (
-            uint64 optInMinDurationBlocks,
-            uint64 optOutDelayDurationBlocks,
-            uint64 defaultOperatorMaxValidators,
-            uint64 defaultBlockGasLimit
-        ) = cccp.getConfig();
+        (uint64 optInDelayBlocks, uint64 optOutDelayBlocks, uint64 defaultOperatorMaxKeys, uint64 defaultBlockGasLimit)
+        = ccr.getConfig();
 
-        assertEq(optInMinDurationBlocks, deployParams.optInMinDurationBlocks);
-        assertEq(optOutDelayDurationBlocks, deployParams.optOutDelayDurationBlocks);
-        assertEq(defaultOperatorMaxValidators, deployParams.defaultOperatorMaxValidators);
+        assertEq(optInDelayBlocks, deployParams.optInDelayBlocks);
+        assertEq(optOutDelayBlocks, deployParams.optOutDelayBlocks);
+        assertEq(defaultOperatorMaxKeys, deployParams.defaultOperatorMaxKeys);
         assertEq(defaultBlockGasLimit, deployParams.defaultBlockGasLimit);
-        assertEq(cccp.getContractVersion(), 1);
-        assertFalse(cccp.paused());
+        assertEq(ccr.getContractVersion(), 1);
+        assertFalse(ccr.paused());
     }
 
     function test_roles() public view {
-        assertTrue(cccp.hasRole(cccp.DEFAULT_ADMIN_ROLE(), deployParams.committeeAddress));
-        assertTrue(cccp.getRoleMemberCount(cccp.DEFAULT_ADMIN_ROLE()) == 1);
-        assertTrue(cccp.hasRole(cccp.PAUSE_ROLE(), deployParams.committeeAddress));
-        assertTrue(cccp.hasRole(cccp.RESUME_ROLE(), deployParams.committeeAddress));
-        assertEq(cccp.getRoleMemberCount(cccp.PAUSE_ROLE()), 1);
-        assertEq(cccp.getRoleMemberCount(cccp.RESUME_ROLE()), 1);
+        assertTrue(ccr.hasRole(ccr.DEFAULT_ADMIN_ROLE(), deployParams.committeeAddress));
+        assertTrue(ccr.getRoleMemberCount(ccr.DEFAULT_ADMIN_ROLE()) == 1);
+        assertTrue(ccr.hasRole(ccr.PAUSE_ROLE(), deployParams.committeeAddress));
+        assertTrue(ccr.hasRole(ccr.RESUME_ROLE(), deployParams.committeeAddress));
+        assertEq(ccr.getRoleMemberCount(ccr.PAUSE_ROLE()), 1);
+        assertEq(ccr.getRoleMemberCount(ccr.RESUME_ROLE()), 1);
     }
 
     function test_proxy() public {
-        OssifiableProxy proxy = OssifiableProxy(payable(address(cccp)));
+        OssifiableProxy proxy = OssifiableProxy(payable(address(ccr)));
         assertEq(proxy.proxy__getAdmin(), address(deployParams.proxyAdmin));
         assertFalse(proxy.proxy__getIsOssified());
 
-        CCCP cccpImpl = CCCP(proxy.proxy__getImplementation());
-        assertEq(cccpImpl.getContractVersion(), type(uint64).max);
+        CCR ccrImpl = CCR(proxy.proxy__getImplementation());
+        assertEq(ccrImpl.getContractVersion(), type(uint64).max);
 
         vm.expectRevert(Initializable.InvalidInitialization.selector);
-        cccp.initialize({
+        ccr.initialize({
             committeeAddress: deployParams.committeeAddress,
-            optInMinDurationBlocks: deployParams.optInMinDurationBlocks,
-            optOutDelayDurationBlocks: deployParams.optOutDelayDurationBlocks,
-            defaultOperatorMaxValidators: deployParams.defaultOperatorMaxValidators,
+            optInDelayBlocks: deployParams.optInDelayBlocks,
+            optOutDelayBlocks: deployParams.optOutDelayBlocks,
+            defaultOperatorMaxKeys: deployParams.defaultOperatorMaxKeys,
             defaultBlockGasLimit: deployParams.defaultBlockGasLimit
         });
     }

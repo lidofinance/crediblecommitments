@@ -7,22 +7,22 @@ import {ScriptInit} from "./ScriptInit.sol";
 import {JsonObj, Json} from "./utils/Json.sol";
 
 import {OssifiableProxy} from "../src/lib/proxy/OssifiableProxy.sol";
-import {CCCP} from "../src/CCCP.sol";
+import {CCR} from "../src/CCR.sol";
 
 struct DeployParams {
     address lidoLocatorAddress;
     bytes32 csModuleType;
     address proxyAdmin;
     address committeeAddress;
-    uint64 optInMinDurationBlocks;
-    uint64 optOutDelayDurationBlocks;
-    uint64 defaultOperatorMaxValidators;
+    uint64 optInDelayBlocks;
+    uint64 optOutDelayBlocks;
+    uint64 defaultOperatorMaxKeys;
     uint64 defaultBlockGasLimit;
 }
 
 abstract contract DeployBase is ScriptInit {
     DeployParams public params;
-    CCCP public cccp;
+    CCR public ccr;
 
     constructor(string memory _chainName, uint256 _chainId) ScriptInit(_chainName, _chainId) {}
 
@@ -31,20 +31,20 @@ abstract contract DeployBase is ScriptInit {
 
         vm.startBroadcast(pk);
         {
-            // deploy new CCCP implementation
-            CCCP cccpImpl = _deployImplementation(params);
+            // deploy new CCR implementation
+            CCR ccrImpl = _deployImplementation(params);
 
-            cccp = CCCP(
+            ccr = CCR(
                 _deployProxy(
                     params.proxyAdmin,
-                    address(cccpImpl),
+                    address(ccrImpl),
                     abi.encodeCall(
-                        CCCP.initialize,
+                        CCR.initialize,
                         (
                             params.committeeAddress,
-                            params.optInMinDurationBlocks,
-                            params.optOutDelayDurationBlocks,
-                            params.defaultOperatorMaxValidators,
+                            params.optInDelayBlocks,
+                            params.optOutDelayBlocks,
+                            params.defaultOperatorMaxKeys,
                             params.defaultBlockGasLimit
                         )
                     )
@@ -53,8 +53,8 @@ abstract contract DeployBase is ScriptInit {
 
             JsonObj memory deployJson = Json.newObj();
             deployJson.set("ChainId", chainId);
-            deployJson.set("CCCPImpl", address(cccpImpl));
-            deployJson.set("CCCP", address(cccp));
+            deployJson.set("CCRImpl", address(ccrImpl));
+            deployJson.set("CCR", address(ccr));
             deployJson.set("LidoLocator", params.lidoLocatorAddress);
             deployJson.set("DeployParams", abi.encode(params));
             vm.writeJson(deployJson.str, _deployJsonFilename());
@@ -64,8 +64,8 @@ abstract contract DeployBase is ScriptInit {
     }
 
     /// @dev can be overridden to customize the upgrade process
-    function _deployImplementation(DeployParams memory _params) internal virtual returns (CCCP) {
-        return new CCCP(_params.lidoLocatorAddress, _params.csModuleType);
+    function _deployImplementation(DeployParams memory _params) internal virtual returns (CCR) {
+        return new CCR(_params.lidoLocatorAddress, _params.csModuleType);
     }
 
     function _deployProxy(address _admin, address _impl, bytes memory _data) internal returns (address) {

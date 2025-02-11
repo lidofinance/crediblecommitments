@@ -10,7 +10,7 @@ contract DeployMainnet is DeployBase {
         // implementation constants
         params.lidoLocatorAddress = 0xC1d0b3DE6792Bf6b4b37EccdcC24e45978Cfd2Eb;
         params.csModuleType = "community-onchain-v1";
-        params.defaultOperatorMaxValidators = 1000;
+        params.defaultOperatorMaxKeys = 1000;
         params.defaultBlockGasLimit = 3000000;
 
         // proxy
@@ -18,8 +18,8 @@ contract DeployMainnet is DeployBase {
 
         // initial parameters
         params.committeeAddress = 0x0000000000000000000000000000000000000000; // Dev team EOA
-        params.optInMinDurationBlocks = 0;
-        params.optOutDelayDurationBlocks = 64;
+        params.optInDelayBlocks = 0;
+        params.optOutDelayBlocks = 64;
 
         _setUp();
     }
