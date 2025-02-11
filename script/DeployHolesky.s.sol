@@ -10,7 +10,7 @@ contract DeployHolesky is DeployBase {
         // implementation constants
         params.lidoLocatorAddress = 0x28FAB2059C713A7F9D8c86Db49f9bb0e96Af1ef8;
         params.csModuleType = "community-onchain-v1";
-        params.defaultOperatorMaxValidators = 100;
+        params.defaultOperatorMaxKeys = 100;
         params.defaultBlockGasLimit = 1000000;
 
         // proxy
@@ -18,8 +18,8 @@ contract DeployHolesky is DeployBase {
 
         // initial parameters
         params.committeeAddress = 0x401FD888B5E41113B7c0C47725A742bbc3A083EF; // Dev team EOA
-        params.optInMinDurationBlocks = 32;
-        params.optOutDelayDurationBlocks = 64;
+        params.optInDelayBlocks = 32;
+        params.optOutDelayBlocks = 64;
 
         _setUp();
     }

@@ -10,8 +10,8 @@ struct CSMNodeOperator {
     uint32 totalWithdrawnKeys;
     uint32 totalDepositedKeys;
     uint32 totalVettedKeys;
-    uint32 stuckValidatorsCount;
-    uint32 depositableValidatorsCount;
+    uint32 stuckKeysCount;
+    uint32 depositableKeysCount;
     uint32 targetLimit;
     uint8 targetLimitMode;
     uint32 totalExitedKeys;

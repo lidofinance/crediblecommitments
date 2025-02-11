@@ -10,7 +10,7 @@ import {StakingRouterMock} from "test/helpers/mocks/StakingRouterMock.sol";
 import {CuratedModuleMock} from "test/helpers/mocks/CuratedModuleMock.sol";
 import {CSModuleMock} from "test/helpers/mocks/CSModuleMock.sol";
 
-abstract contract CCCPFixtures is Test, Fixtures, Utilities {
+abstract contract CCRFixtures is Test, Fixtures, Utilities {
     LidoLocatorMock public locator;
     StakingRouterMock public sr;
     CuratedModuleMock public nor;
@@ -25,9 +25,9 @@ abstract contract CCCPFixtures is Test, Fixtures, Utilities {
     address internal noCurated1Manager;
     address internal committee;
 
-    // uint64 optInMinDurationBlocks = 100;
-    // uint64 optOutDelayDurationBlocks = 200;
-    // uint64 defaultOperatorMaxValidators = 100;
+    // uint64 optInDelayBlocks = 100;
+    // uint64 optOutDelayBlocks = 200;
+    // uint64 defaultOperatorMaxKeys = 100;
     // uint64 defaultBlockGasLimit = 1000000;
 
     // function createNo(uint256 modId, address rewAddr) internal returns (uint256) {
@@ -49,7 +49,7 @@ abstract contract CCCPFixtures is Test, Fixtures, Utilities {
     }
 }
 
-contract CCCPCommon is CCCPFixtures {
+contract CCRCommon is CCRFixtures {
     function setUp() public virtual {
         committee = nextAddress("COMMITTEE");
         stranger1 = nextAddress("STRANGER1");

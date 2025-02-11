@@ -8,7 +8,7 @@ import {StakingModuleMock} from "./StakingModuleMock.sol";
 
 contract CSModuleMock is StakingModuleMock, ICSModule {
     function getNodeOperator(uint256 id) public view returns (CSMNodeOperator memory no) {
-        no.totalAddedKeys = ops[id].totalAddedValidators;
+        no.totalAddedKeys = ops[id].totalAddedKeys;
         no.rewardAddress = ops[id].rewardAddress;
     }
 

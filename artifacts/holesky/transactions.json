@@ -46,7 +46,7 @@
     {
       "hash": "0x138cad03fbe5a1d4f10a6765b4328249858670248d32bb3f8fbbde49ac17a339",
       "transactionType": "CREATE",
-      "contractName": "CCCP",
+      "contractName": "CCR",
       "contractAddress": "0x7c178b9b797c6ea6776a784c22a0f95a79385c9b",
       "function": null,
       "arguments": [
@@ -88,7 +88,7 @@
     {
       "hash": "0xfb7ba8b9366bd8189498e164cabf5317c199115d94919cbf432de63e185af960",
       "transactionType": "CREATE",
-      "contractName": "CCCP",
+      "contractName": "CCR",
       "contractAddress": "0x0442fb2c8607d04d6ba496ea8990da7bd7ec25fc",
       "function": null,
       "arguments": [
@@ -130,7 +130,7 @@
     {
       "hash": "0xfa237667dbb4f06775db358bbb699b0170861becbb005617df009b5138c46164",
       "transactionType": "CREATE",
-      "contractName": "CCCP",
+      "contractName": "CCR",
       "contractAddress": "0x82cfae30820b4249acd6315c90a4d0a9fef5a99a",
       "function": null,
       "arguments": [
@@ -172,7 +172,7 @@
     {
       "hash": "0x7bec86c8525d9afe2a2ae2cce7526d114800521780f991aad20a53b06e363dee",
       "transactionType": "CREATE",
-      "contractName": "CCCP",
+      "contractName": "CCR",
       "contractAddress": "0x76773e5a432113238be489f9a7bf716e8dc4a015",
       "function": null,
       "arguments": [

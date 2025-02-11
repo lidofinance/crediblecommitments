@@ -13,7 +13,7 @@ struct StakingModule {
     string name;
     uint64 lastDepositAt;
     uint256 lastDepositBlock;
-    uint256 exitedValidatorsCount;
+    uint256 exitedKeysCount;
     uint16 priorityExitShareThreshold;
     uint64 maxDepositsPerBlock;
     uint64 minDepositBlockDistance;

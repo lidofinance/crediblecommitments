@@ -15,19 +15,19 @@ contract CuratedModuleMock is StakingModuleMock, ICuratedModule {
             bool active,
             string memory name,
             address rewardAddress,
-            uint64 totalVettedValidators,
-            uint64 totalExitedValidators,
-            uint64 totalAddedValidators
+            uint64 totalVettedKeys,
+            uint64 totalExitedKeys,
+            uint64 totalAddedKeys
         )
     {
         active = ops[id].active;
         rewardAddress = ops[id].rewardAddress;
-        totalAddedValidators = ops[id].totalAddedValidators;
+        totalAddedKeys = ops[id].totalAddedKeys;
 
         // silence warnings
         name;
-        totalExitedValidators;
-        totalVettedValidators;
+        totalExitedKeys;
+        totalVettedKeys;
     }
 
     function getType() external pure returns (bytes32 moduleType) {

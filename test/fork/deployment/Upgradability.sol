@@ -5,7 +5,7 @@ pragma solidity 0.8.28;
 
 import {Test} from "forge-std/Test.sol";
 import {OssifiableProxy} from "../../../src/lib/proxy/OssifiableProxy.sol";
-import {CCCPMock} from "../../helpers/mocks/CCCPMock.sol";
+import {CCRMock} from "../../helpers/mocks/CCRMock.sol";
 import {DeploymentFixtures} from "../../helpers/Fixtures.sol";
 
 contract UpgradabilityTest is Test, DeploymentFixtures {
@@ -15,28 +15,28 @@ contract UpgradabilityTest is Test, DeploymentFixtures {
         initializeFromDeployment(env.DEPLOY_CONFIG);
     }
 
-    function test_CCCPUpgradeTo() public {
-        OssifiableProxy proxy = OssifiableProxy(payable(address(cccp)));
-        CCCPMock newCccp = new CCCPMock(address(cccp.LIDO_LOCATOR()), "csm-type-new");
+    function test_CCRUpgradeTo() public {
+        OssifiableProxy proxy = OssifiableProxy(payable(address(ccr)));
+        CCRMock newCcr = new CCRMock(address(ccr.LIDO_LOCATOR()), "csm-type-new");
 
         vm.prank(proxy.proxy__getAdmin());
-        proxy.proxy__upgradeTo(address(newCccp));
-        assertEq(CCCPMock(address(cccp)).__test__getCSModuleType(), "csm-type-new");
+        proxy.proxy__upgradeTo(address(newCcr));
+        assertEq(CCRMock(address(ccr)).__test__getCSModuleType(), "csm-type-new");
     }
 
-    function test_CCCPUpgradeToAndCall() public {
-        OssifiableProxy proxy = OssifiableProxy(payable(address(cccp)));
-        CCCPMock newCccp = new CCCPMock(address(cccp.LIDO_LOCATOR()), "csm-type-new");
+    function test_CCRUpgradeToAndCall() public {
+        OssifiableProxy proxy = OssifiableProxy(payable(address(ccr)));
+        CCRMock newCcr = new CCRMock(address(ccr.LIDO_LOCATOR()), "csm-type-new");
 
-        address contractAdmin = cccp.getRoleMember(cccp.DEFAULT_ADMIN_ROLE(), 0);
+        address contractAdmin = ccr.getRoleMember(ccr.DEFAULT_ADMIN_ROLE(), 0);
         vm.prank(contractAdmin);
-        cccp.pause();
-        assertTrue(cccp.paused());
+        ccr.pause();
+        assertTrue(ccr.paused());
 
         vm.prank(proxy.proxy__getAdmin());
-        proxy.proxy__upgradeToAndCall(address(newCccp), abi.encodeCall(newCccp.initialize_v2, ()));
-        assertEq(CCCPMock(address(cccp)).__test__getCSModuleType(), "csm-type-new");
-        assertEq(cccp.getContractVersion(), 2);
-        assertFalse(cccp.paused());
+        proxy.proxy__upgradeToAndCall(address(newCcr), abi.encodeCall(newCcr.initialize_v2, ()));
+        assertEq(CCRMock(address(ccr)).__test__getCSModuleType(), "csm-type-new");
+        assertEq(ccr.getContractVersion(), 2);
+        assertFalse(ccr.paused());
     }
 }
